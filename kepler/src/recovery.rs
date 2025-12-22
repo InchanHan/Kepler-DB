@@ -1,4 +1,5 @@
 use std::{fs, path::Path};
+use crate::utils::from_le_to_u64;
 
 use bytes::Bytes;
 
@@ -60,7 +61,7 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
 
             if max_seqno < seqno {
                 seqno_return = seqno;
-                let type_num = u8::from_be_bytes(data[idx + 1..idx + 2].try_into().unwrap());
+                let type_num: u8 = data[idx + 1];
                 let new_key = Bytes::copy_from_slice(&data[idx + 17..idx + 17 + key_len]);
                 let new_val = if type_num == 0 {
                     let val = &data[(idx + 17 + key_len)..(idx + 17 + key_len + val_len)];
@@ -77,9 +78,5 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
     }
 
     Some((temp_active, seqno_return))
-}
-
-pub fn from_le_to_u64(data: &[u8], start_idx: usize, end_idx: usize) -> u64 {
-    u64::from_le_bytes(data[start_idx..end_idx].try_into().unwrap())
 }
 

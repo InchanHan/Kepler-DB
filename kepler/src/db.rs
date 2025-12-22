@@ -1,4 +1,4 @@
-use crate::{flush_worker::{self, FlushConfig, FlushResult, FlushWorker}, recovery::replay, memtable::MemTable, wal_writer::{self, WalWriter}};
+use crate::{utils::from_le_to_u64, flush_worker::{self, FlushConfig, FlushResult, FlushWorker}, recovery::replay, memtable::MemTable, wal_writer::{self, WalWriter}};
 use bytes::Bytes;
 use std::{
     collections::{BTreeMap, VecDeque}, fs::{self, File, OpenOptions}, io::{self, BufReader, Read, Write}, mem::{self, replace}, os::unix::fs::OpenOptionsExt, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}, mpsc}, thread, u64
@@ -19,6 +19,7 @@ pub(crate) struct KeplerInner {
     wal: Mutex<WalWriter>,
     seqno: AtomicU64,
     sstno: AtomicU64,
+    path: PathBuf,
 }
 
 impl KeplerInner {
@@ -39,7 +40,50 @@ impl KeplerInner {
             wal: Mutex::new(wal_writer),
             seqno: AtomicU64::new(seqno),
             sstno: AtomicU64::new(sstno),
+            path: path.to_path_buf(),
         })
+    }
+
+    pub fn get(&self, key: &[u8]) -> io::Result<Option<Bytes>> {
+        if let Some((_, v)) = self.active.read().unwrap().tree.get(&Bytes::copy_from_slice(key)) {
+            match v {
+                Value::Data(b) => return Ok(Some(b.clone())),
+                Value::Tombstone => return Ok(None),
+            }
+        };
+        // seqno(8) + flag(1) + key_len(4) + val_len(4) + key(?) + val(?)
+        let mut current_file_id: u64 = 1;
+        let latest_file_id = self.sstno.load(Ordering::Relaxed);
+        let mut val_return = None;
+
+        while current_file_id <= latest_file_id {
+            let current_sst_path = self.path.as_path().join(format!("sst-{:06}.log", current_file_id));
+            let data: &[u8] = &fs::read(current_sst_path).unwrap();
+            let data_len = data.len();
+            let mut idx = 0;
+
+            while idx <= data_len {
+                let flag: u8 = data[idx + 1];
+                let key_len = from_le_to_u64(data, idx + 9, idx + 13) as usize;
+                let val_len = from_le_to_u64(data, idx + 13, idx + 17) as usize;
+                let found_key = &data[idx + 17..idx + 17 + key_len];
+                let found_val = &data[(idx + 17 + key_len)..(idx + 17 + key_len + val_len)];
+                let val_bytes = Bytes::copy_from_slice(found_val);
+                if found_key == key {
+                    match flag {
+                        0 => val_return = Some(val_bytes),
+                        1 => val_return = None,
+                        _ => (),
+                    }
+                }
+
+                idx += 8 + 1 + 4 + 4 + key_len + val_len;
+            }
+
+            current_file_id += 1;
+        }
+
+        Ok(val_return)
     }
 
     pub fn insert(&self, key: &[u8], val: &[u8]) -> io::Result<()> {
