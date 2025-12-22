@@ -1,7 +1,7 @@
-use crate::{flush_worker::{self, FlushConfig, FlushResult, FlushWorker}, memtable::MemTable, wal_writer::WalWriter};
+use crate::{flush_worker::{self, FlushConfig, FlushResult, FlushWorker}, recovery::replay, memtable::MemTable, wal_writer::{self, WalWriter}};
 use bytes::Bytes;
 use std::{
-    collections::{BTreeMap, VecDeque}, fs::{self, File, OpenOptions}, io::{self, BufReader, Read}, mem::{self, replace}, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}, mpsc}, thread
+    collections::{BTreeMap, VecDeque}, fs::{self, File, OpenOptions}, io::{self, BufReader, Read, Write}, mem::{self, replace}, os::unix::fs::OpenOptionsExt, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}, mpsc}, thread, u64
 };
 
 const ACTIVE_MAX_CAP: u64 = 32 * 1024 * 1024;
@@ -26,27 +26,19 @@ impl KeplerInner {
         let sst_dir = path.join("sst");
         let manifest_path = path.join("manifest");
         fs::create_dir_all(&sst_dir)?;
+        File::create(&manifest_path)?;
 
-        let mut manifest = OpenOptions::new()
-            .create(true)
-            .read(true)
-            .write(true)
-            .open(&manifest_path)?;
-        let mut buf_reader = BufReader::new(manifest);
-        let mut seqno = String::new();
-        buf_reader.read_to_string(&mut seqno)?;
-
-        let seqno: u64 = seqno.parse().unwrap_or(0);
-        let mem_table = MemTable::new();
+        let (seqno, sstno, mem_table) = replay(path);
         let wal_writer = WalWriter::new(path)?;
         let (flush_worker, flush_result_rx) = FlushWorker::new(path.to_path_buf());
-        manifest_writer(flush_result_rx);
+        manifest_writer(manifest_path, flush_result_rx);
+
         Ok(Self {
             active: RwLock::new(mem_table),
             flush_queue: flush_worker,
             wal: Mutex::new(wal_writer),
             seqno: AtomicU64::new(seqno),
-            sstno: AtomicU64::new(0),
+            sstno: AtomicU64::new(sstno),
         })
     }
 
@@ -79,10 +71,25 @@ impl KeplerInner {
     }
 }
 
-pub fn manifest_writer(rx: mpsc::Receiver<FlushResult>) {
+pub fn manifest_writer(path: PathBuf, rx: mpsc::Receiver<FlushResult>) {
     let _ = thread::spawn(move || {
+        let mut manifest = OpenOptions::new()
+            .append(true)
+            .open(path)
+            .unwrap();
         while let Ok(result) = rx.recv() {
-        }// writting to manifest
+        // type(1) + sstno(8) + max_seqno(8) + min_seqno(8)
+            let type_num = result.type_num;
+            let sstno = result.sstno;
+            let max_seqno = result.max_seqno;
+            let min_seqno = result.min_seqno;
+
+            manifest.write_all(&[type_num]);
+            manifest.write_all(&sstno.to_le_bytes());
+            manifest.write_all(&max_seqno.to_le_bytes());
+            manifest.write_all(&min_seqno.to_le_bytes());
+            manifest.sync_all().unwrap();
+        }
     });
 }
 

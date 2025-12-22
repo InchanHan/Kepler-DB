@@ -8,7 +8,7 @@ use std::{
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct FileId(u64);
+pub struct FileId(pub u64);
 
 pub struct WalWriter {
     wal: File,
@@ -86,7 +86,7 @@ impl WalWriter {
     }
 }
 
-fn find_latest_file(wal_dir: &Path) -> io::Result<Option<(FileId, PathBuf)>> {
+pub fn find_latest_file(wal_dir: &Path) -> io::Result<Option<(FileId, PathBuf)>> {
     let mut file_set: Vec<(FileId, PathBuf)> = Vec::new();
 
     if !wal_dir.exists() {

@@ -9,14 +9,15 @@ pub struct FlushConfig {
 }
 
 pub struct FlushResult {
-    sstno: u64,
-    max_seqno: u64,
-    min_seqno: u64,
+    pub type_num: u8,
+    pub sstno: u64,
+    pub max_seqno: u64,
+    pub min_seqno: u64,
 }
 
 impl FlushResult {
-    pub fn new(sstno: u64, max_seqno: u64, min_seqno: u64) -> Self {
-        Self { sstno, max_seqno, min_seqno }
+    pub fn new(type_num: u8, sstno: u64, max_seqno: u64, min_seqno: u64) -> Self {
+        Self { type_num, sstno, max_seqno, min_seqno }
     } 
 }
 
@@ -69,6 +70,7 @@ pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
             Value::Tombstone => (1, &[]),
         };
 
+        /// seqno(8) + flag(1) + key_len(4) + val_len(4) + key(?) + val(?)
         let key_len = key.len() as u32;
         let val_len = val.len() as u32;
         sst.write_all(&seqno.to_le_bytes());
@@ -80,5 +82,5 @@ pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
         sst.sync_all().unwrap();
     }
     
-    FlushResult::new(cfg.sstno, max_seqno, min_seqno)
+    FlushResult::new(0, cfg.sstno, max_seqno, min_seqno)
 }
