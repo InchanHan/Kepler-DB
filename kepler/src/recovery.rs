@@ -22,7 +22,7 @@ pub fn replay_sst(path: &Path) -> (u64, u64) {
     let mut max_seqno: u64 = 1;
     let mut max_sstno: u64 = 1;
 
-    while (idx <= data_len) {
+    while idx + 25 <= data_len {
         let sstno = from_le_to_u64(data, idx + 1, idx + 9);
         let max_seqno = from_le_to_u64(data, idx + 9, idx + 17);
         if max_sstno < sstno { max_sstno = sstno; }
