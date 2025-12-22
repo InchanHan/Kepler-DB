@@ -1,7 +1,7 @@
-use crate::{wal_writer::WalWriter, memtable::MemTable, flush_worker::{FlushWorker, FlushConfig}};
+use crate::{flush_worker::{self, FlushConfig, FlushResult, FlushWorker}, memtable::MemTable, wal_writer::WalWriter};
 use bytes::Bytes;
 use std::{
-    collections::{BTreeMap, VecDeque}, fs::{self, File, OpenOptions}, io::{self, BufReader, Read}, mem::{self, replace}, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}}
+    collections::{BTreeMap, VecDeque}, fs::{self, File, OpenOptions}, io::{self, BufReader, Read}, mem::{self, replace}, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}, mpsc}, thread
 };
 
 const ACTIVE_MAX_CAP: u64 = 32 * 1024 * 1024;
@@ -39,10 +39,11 @@ impl KeplerInner {
         let seqno: u64 = seqno.parse().unwrap_or(0);
         let mem_table = MemTable::new();
         let wal_writer = WalWriter::new(path)?;
-
+        let (flush_worker, flush_result_rx) = FlushWorker::new(path.to_path_buf());
+        manifest_writer(flush_result_rx);
         Ok(Self {
             active: RwLock::new(mem_table),
-            flush_queue: FlushWorker::new(path),
+            flush_queue: flush_worker,
             wal: Mutex::new(wal_writer),
             seqno: AtomicU64::new(seqno),
             sstno: AtomicU64::new(0),
@@ -77,4 +78,12 @@ impl KeplerInner {
         Ok(())
     }
 }
+
+pub fn manifest_writer(rx: mpsc::Receiver<FlushResult>) {
+    let _ = thread::spawn(move || {
+        while let Ok(result) = rx.recv() {
+        }// writting to manifest
+    });
+}
+
 

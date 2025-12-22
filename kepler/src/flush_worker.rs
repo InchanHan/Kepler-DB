@@ -8,6 +8,18 @@ pub struct FlushConfig {
     sstno: u64,
 }
 
+pub struct FlushResult {
+    sstno: u64,
+    max_seqno: u64,
+    min_seqno: u64,
+}
+
+impl FlushResult {
+    pub fn new(sstno: u64, max_seqno: u64, min_seqno: u64) -> Self {
+        Self { sstno, max_seqno, min_seqno }
+    } 
+}
+
 impl FlushConfig {
     pub fn new(mem: MemTable, sstno: u64) -> Self {
         Self { memtable: Arc::new(mem), sstno, }
@@ -16,51 +28,57 @@ impl FlushConfig {
 
 pub struct FlushWorker {
     pub sender: mpsc::SyncSender<FlushConfig>,
-    sst_path: PathBuf,
 }
 
 impl FlushWorker {
-    pub(crate) fn new(path: &Path) -> Self {
+    pub(crate) fn new(path: PathBuf) -> (Self, mpsc::Receiver<FlushResult>) {
         let (sender, rx) = mpsc::sync_channel::<FlushConfig>(4);
-        let sst_path = path.join("sst");
+        let (result_tx, result_rx) = mpsc::sync_channel::<FlushResult>(4);
         let _ = thread::spawn(move || {
-            while let Ok(mem) = rx.recv() {
+            while let Ok(cfg) = rx.recv() {
+                let result = flush_one(&path, cfg);
+                result_tx.send(result);
             }
         });
-        Self { sender, sst_path }
+        (Self { sender }, result_rx)
     }
 
     pub(crate) fn send(&self, cfg: FlushConfig) {
         let _ = self.sender.send(cfg).unwrap();
     }
+}
 
-    pub(crate) fn flush_one(&self, cfg: FlushConfig) {
-        let sst_file_path = self.sst_path.join(format!("sst-{:06}.log", cfg.sstno));
-        
-        let mut sst = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .open(&sst_file_path)
-            .unwrap();
+pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
+    let sst_file_path = path.join(format!("sst/sst-{:06}.log", cfg.sstno));
+    
+    let mut sst = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&sst_file_path)
+        .unwrap();
 
-        let tree = &cfg.memtable.tree;    
-        for (key, (seqno, val)) in tree.iter() {
-            let (flag, val): (u8, &[u8]) = match val {
-                Value::Data(b) => (0, b.as_ref()),
-                Value::Tombstone => (1, &[]),
-            };
+    let tree = &cfg.memtable.tree;
+    let mut max_seqno: u64 = 0;
+    let mut min_seqno: u64 = 0;
+    for (key, (seqno, val)) in tree.iter() {
+        if max_seqno < *seqno { max_seqno = *seqno; }
+        else if *seqno < min_seqno { min_seqno = *seqno; }
 
-            let key_len = key.len() as u32;
-            let val_len = val.len() as u32;
-            sst.write_all(&seqno.to_le_bytes());
-            sst.write_all(&[flag]);
-            sst.write_all(&key_len.to_le_bytes());
-            sst.write_all(&val_len.to_le_bytes());
-            sst.write_all(key);
-            sst.write_all(val);
-            sst.sync_all().unwrap();
-        }
+        let (flag, val): (u8, &[u8]) = match val {
+            Value::Data(b) => (0, b.as_ref()),
+            Value::Tombstone => (1, &[]),
+        };
 
-
+        let key_len = key.len() as u32;
+        let val_len = val.len() as u32;
+        sst.write_all(&seqno.to_le_bytes());
+        sst.write_all(&[flag]);
+        sst.write_all(&key_len.to_le_bytes());
+        sst.write_all(&val_len.to_le_bytes());
+        sst.write_all(key);
+        sst.write_all(val);
+        sst.sync_all().unwrap();
     }
+    
+    FlushResult::new(cfg.sstno, max_seqno, min_seqno)
 }
