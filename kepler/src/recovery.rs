@@ -24,7 +24,7 @@ pub fn replay_sst(path: &Path) -> (u64, u64) {
 
     while idx + 25 <= data_len {
         let sstno = from_le_to_u64(data, idx + 1, idx + 9);
-        let max_seqno = from_le_to_u64(data, idx + 9, idx + 17);
+        max_seqno = from_le_to_u64(data, idx + 9, idx + 17);
         if max_sstno < sstno { max_sstno = sstno; }
         idx += 25;
     }
@@ -54,7 +54,7 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
         let mut idx = 0;
         
         while idx <= data_len {
-            let seqno = from_le_to_u64(data, 0, 8);
+            let seqno = from_le_to_u64(data, idx, idx + 8);
             let key_len = from_le_to_u64(data, idx + 9, idx + 13) as usize;
             let val_len = from_le_to_u64(data, idx + 13, idx + 17) as usize;
 
