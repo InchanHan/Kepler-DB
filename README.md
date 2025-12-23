@@ -1,8 +1,10 @@
 # KeplerDB 🪐
-<img width="686" height="457" alt="b4d9557f-bfea-4ab5-b362-6908d6cfd8af" src="https://github.com/user-attachments/assets/e39b8844-98e6-4754-bdb4-c42943e3fa5a" />
-
 KeplerDB is a lightweight, high-performance embedded key-value store written in Rust.  
 It implements core components of modern LSM-tree-based databases, including WAL (Write-Ahead Logging), MemTables, background flush workers, and manifest logging for crash-safe recovery.
+<div align="center">
+  <img width="800" height="525" alt="ChatGPT Image Dec 24, 2025, 03_39_55 AM" src="https://github.com/user-attachments/assets/48ec9b43-90f4-44e4-9ecf-4e9029c5573f" />
+</div>
+
 - **Write-Ahead Log (WAL)** for durability
 - **MemTable (BTreeMap)** for fast in-memory writes
 - **Flush Worker** for async flushing to on-disk SST files
@@ -14,19 +16,21 @@ It implements core components of modern LSM-tree-based databases, including WAL 
 ---
 ## How to use
 ```rust
-use KeplerDB::*;
+fn main() -> KeplerResult<()> {
+  // start new DB  
+  let db = Kepler::new("aa")?;
 
-// create new DB
-let db = KeplerDB::new("test")?;
+  // add some data
+  db.insert(b"hello", b"good")?;
 
-// store data
-db.insert("hello", "world")?;
+  // retrieve data from DB
+  let founded_val: Option<Bytes> = db.get(b"hello")?
 
-// retrieve data
-db.get("hello")?;
+  // remove data
+  db.remove(b"hello")?;
 
-// remove data
-db.remove("remove")?;
+  Ok(())
+}
 ```
 ---
 
