@@ -57,7 +57,7 @@ impl FlushWorker {
         let _ = thread::spawn(move || {
             while let Ok(cfg) = rx.recv() {
                 match flush_one(&path, cfg) {
-                    Ok(result) => { result_tx.send(result); },
+                    Ok(result) => { let _ = result_tx.send(result); },
                     Err(_) => panic!("Flush Worker: failed to flush data in memory, which is fatal!"),
                 }
             }
@@ -66,7 +66,7 @@ impl FlushWorker {
     }
 
     pub(crate) fn send(&self, cfg: FlushConfig) {
-        let _ = self.sender.send(cfg).unwrap();
+        let _ = self.sender.send(cfg);
     }
 }
 

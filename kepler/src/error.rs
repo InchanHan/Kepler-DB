@@ -15,6 +15,9 @@ pub enum KeplerErr {
     #[error("Corrupted SST format at byte offset {0}")]
     CorruptedSst(usize),
 
+    #[error("Memory Error: {0}")]
+    Memory(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

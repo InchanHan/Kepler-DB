@@ -1,27 +1,25 @@
 use crate::{
-    flush_worker::{self, FlushConfig, FlushResult, FlushWorker},
+    flush_worker::{FlushConfig, FlushResult, FlushWorker},
     memtable::MemTable,
     recovery::replay,
     utils::from_le_to_u64,
-    wal_writer::{self, WalWriter},
+    wal_writer::WalWriter,
+    error::{KeplerResult,KeplerErr},
+    constants::ACTIVE_CAP_MAX,
 };
 use bytes::Bytes;
 use std::{
-    collections::{BTreeMap, VecDeque},
     fs::{self, File, OpenOptions},
-    io::{self, BufReader, Read, Write},
-    mem::{self, replace},
-    os::unix::fs::OpenOptionsExt,
+    io::Write,
+    mem,
     path::{Path, PathBuf},
     sync::{
         Arc, Mutex, RwLock,
         atomic::{AtomicU64, Ordering},
         mpsc,
     },
-    thread, u64,
+    thread,
 };
-
-const ACTIVE_MAX_CAP: u64 = 32 * 1024 * 1024;
 
 pub enum Value {
     Data(Bytes),
@@ -40,13 +38,13 @@ pub(crate) struct KeplerInner {
 }
 
 impl KeplerInner {
-    pub fn new(path: &Path) -> io::Result<Self> {
+    pub fn new(path: &Path) -> KeplerResult<Self> {
         let sst_dir = path.join("sst");
         let manifest_path = path.join("manifest");
         fs::create_dir_all(&sst_dir)?;
         File::create(&manifest_path)?;
 
-        let (seqno, sstno, mem_table) = replay(path);
+        let (seqno, sstno, mem_table) = replay(path)?;
         let wal_writer = WalWriter::new(path)?;
         let (flush_worker, flush_result_rx) = FlushWorker::new(path.to_path_buf());
         manifest_writer(manifest_path, flush_result_rx);
@@ -61,11 +59,11 @@ impl KeplerInner {
         })
     }
 
-    pub fn get(&self, key: &[u8]) -> io::Result<Option<Bytes>> {
+    pub fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
         if let Some((_, v)) = self
             .active
             .read()
-            .unwrap()
+            .map_err(|_| KeplerErr::Memory("Lock poisoned".into()))?
             .tree
             .get(&Bytes::copy_from_slice(key))
         {
@@ -84,22 +82,32 @@ impl KeplerInner {
                 .path
                 .as_path()
                 .join(format!("sst-{:06}.log", current_file_id));
-            let data: &[u8] = &fs::read(current_sst_path).unwrap();
+            let data = fs::read(current_sst_path)?;
             let data_len = data.len();
             let mut idx = 0;
 
             while idx <= data_len {
                 let flag: u8 = data[idx + 1];
-                let key_len = from_le_to_u64(data, idx + 9, idx + 13) as usize;
-                let val_len = from_le_to_u64(data, idx + 13, idx + 17) as usize;
-                let found_key = &data[idx + 17..idx + 17 + key_len];
-                let found_val = &data[(idx + 17 + key_len)..(idx + 17 + key_len + val_len)];
+                let key_len = from_le_to_u64(&data, idx + 9, idx + 13)? as usize;
+                let val_len = from_le_to_u64(&data, idx + 13, idx + 17)? as usize;
+                let found_key = data
+                    .get(idx + 17..idx + 17 + key_len)
+                    .ok_or(KeplerErr::Wal(format!(
+                        "failed to read Key from WAL, which is fatal! Bytes offset is [{}..{}]",
+                        idx + 17,
+                        idx + 17 + key_len)))?;
+                let found_val = data
+                    .get(idx + 17 + key_len..idx + 17 + key_len + val_len)
+                    .ok_or(KeplerErr::Wal(format!(
+                        "failed to read Value from WAL, which is fatal! Bytes offset is [{}..{}]",
+                        idx + 17 + key_len,
+                        idx + 17 + key_len + val_len)))?;
                 let val_bytes = Bytes::copy_from_slice(found_val);
                 if found_key == key {
                     match flag {
                         0 => val_return = Some(val_bytes),
                         1 => val_return = None,
-                        _ => (),
+                        _ => return Err(KeplerErr::Wal("WAL corrupted!".into())),
                     }
                 }
 
@@ -112,19 +120,19 @@ impl KeplerInner {
         Ok(val_return)
     }
 
-    pub fn insert(&self, key: &[u8], val: &[u8]) -> io::Result<()> {
+    pub fn insert(&self, key: &[u8], val: &[u8]) -> KeplerResult<()> {
         let seqno = self.seqno.fetch_add(1, Ordering::Relaxed);
 
-        let mut wal_ptr = self.wal.lock().unwrap();
+        let mut wal_ptr = self.wal.lock().map_err(|_| KeplerErr::Wal("Lock poisoned. Cannot access to the WalWriter.".into()))?;
         wal_ptr.put(seqno, key, Some(val))?;
         drop(wal_ptr);
 
         let key_bytes = Bytes::copy_from_slice(key);
         let val_bytes = Value::Data(Bytes::copy_from_slice(val));
-        let mut active_ptr = self.active.write().unwrap();
+        let mut active_ptr = self.active.write().map_err(|_| KeplerErr::Memory("Lock posisoned. Can't access to the Memory".into()))?;
         active_ptr.put(seqno, key_bytes, val_bytes);
 
-        let old = if active_ptr.bytes_written >= ACTIVE_MAX_CAP {
+        let old = if active_ptr.bytes_written >= ACTIVE_CAP_MAX {
             Some(mem::replace(&mut *active_ptr, MemTable::new()))
         } else {
             None
@@ -143,19 +151,22 @@ impl KeplerInner {
 
 pub fn manifest_writer(path: PathBuf, rx: mpsc::Receiver<FlushResult>) {
     let _ = thread::spawn(move || {
-        let mut manifest = OpenOptions::new().append(true).open(path).unwrap();
+        let mut manifest = OpenOptions::new()
+            .append(true)
+            .open(path)
+            .expect("Manifest Writer: failed to open manifest filed.");
         while let Ok(result) = rx.recv() {
             // type(1) + sstno(8) + max_seqno(8) + min_seqno(8)
-            let type_num = result.type_num;
-            let sstno = result.sstno;
-            let max_seqno = result.max_seqno;
-            let min_seqno = result.min_seqno;
-
-            manifest.write_all(&[type_num]);
-            manifest.write_all(&sstno.to_le_bytes());
-            manifest.write_all(&max_seqno.to_le_bytes());
-            manifest.write_all(&min_seqno.to_le_bytes());
-            manifest.sync_all().unwrap();
+            manifest.write_all(&[result.type_num])
+                .expect("Manifest Writer: failed to write type byte");
+            manifest.write_all(&result.sstno.to_le_bytes())
+                .expect("Manifest Writer: failed to write sstno bytes");
+            manifest.write_all(&result.max_seqno.to_le_bytes())
+                .expect("Manifest Writer: failed to write max_seqno bytes");
+            manifest.write_all(&result.min_seqno.to_le_bytes())
+                .expect("Manifest Writer: failed to write min_seqno bytes");
+            manifest.sync_all()
+                .expect("Manifest Writer: failed to fsync while writting");
         }
     });
 }
