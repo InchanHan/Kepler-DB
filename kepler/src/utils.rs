@@ -1,6 +1,5 @@
 use crate::error::{KeplerResult, KeplerErr};
 
-
 pub fn from_le_to_u64(data: &[u8], start_idx: usize, end_idx: usize) -> KeplerResult<u64> {
     if data.len() < 8 {
         return Err(KeplerErr::CorruptedSst(0));

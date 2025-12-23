@@ -9,7 +9,7 @@ use std::{
     thread,
 };
 use crate::{
-    db::Value,
+    value::Value,
     memtable::MemTable,
     error::KeplerResult,
 };

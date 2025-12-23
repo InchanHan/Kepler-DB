@@ -6,6 +6,7 @@ use crate::{
     wal_writer::WalWriter,
     error::{KeplerResult,KeplerErr},
     constants::ACTIVE_CAP_MAX,
+    value::Value
 };
 use bytes::Bytes;
 use std::{
@@ -20,11 +21,6 @@ use std::{
     },
     thread,
 };
-
-pub enum Value {
-    Data(Bytes),
-    Tombstone,
-}
 
 struct Kepler(Arc<KeplerInner>);
 

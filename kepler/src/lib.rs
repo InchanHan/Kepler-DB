@@ -6,3 +6,4 @@ pub mod memtable;
 pub mod recovery;
 pub mod utils;
 pub mod wal_writer;
+pub mod value;
