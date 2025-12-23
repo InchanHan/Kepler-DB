@@ -33,6 +33,24 @@ pub(crate) struct KeplerInner {
     path: PathBuf,
 }
 
+impl Kepler {
+    pub fn new<P: Into<PathBuf>>(path: P) -> KeplerResult<Self> {
+        Ok(Self(Arc::new(KeplerInner::new(&path.into())?))) 
+    }
+
+    pub fn insert(&self, key: &[u8], val: &[u8]) -> KeplerResult<()> {
+        Ok(self.0.insert(key, Some(val))?)
+    }
+
+    pub fn remove(&self, key: &[u8]) -> KeplerResult<()> {
+        Ok(self.0.insert(key, None)?)
+    }
+
+    pub fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
+        self.0.get(key)
+    }
+}
+
 impl KeplerInner {
     pub fn new(path: &Path) -> KeplerResult<Self> {
         let sst_dir = path.join("sst");
@@ -116,17 +134,20 @@ impl KeplerInner {
         Ok(val_return)
     }
 
-    pub fn insert(&self, key: &[u8], val: &[u8]) -> KeplerResult<()> {
+    pub fn insert(&self, key: &[u8], val: Option<&[u8]>) -> KeplerResult<()> {
         let seqno = self.seqno.fetch_add(1, Ordering::Relaxed);
 
         let mut wal_ptr = self.wal.lock().map_err(|_| KeplerErr::Wal("Lock poisoned. Cannot access to the WalWriter.".into()))?;
-        wal_ptr.put(seqno, key, Some(val))?;
+        wal_ptr.put(seqno, key, val)?;
         drop(wal_ptr);
 
         let key_bytes = Bytes::copy_from_slice(key);
-        let val_bytes = Value::Data(Bytes::copy_from_slice(val));
+        let val_value = match val {
+            Some(v) => Value::Data(Bytes::copy_from_slice(v)),
+            None => Value::Tombstone,
+        };
         let mut active_ptr = self.active.write().map_err(|_| KeplerErr::Memory("Lock posisoned. Can't access to the Memory".into()))?;
-        active_ptr.put(seqno, key_bytes, val_bytes);
+        active_ptr.put(seqno, key_bytes, val_value);
 
         let old = if active_ptr.bytes_written >= ACTIVE_CAP_MAX {
             Some(mem::replace(&mut *active_ptr, MemTable::new()))
