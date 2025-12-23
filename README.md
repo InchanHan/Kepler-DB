@@ -1,0 +1,95 @@
+# KeplerDB 🪐
+<img width="686" height="457" alt="b4d9557f-bfea-4ab5-b362-6908d6cfd8af" src="https://github.com/user-attachments/assets/e39b8844-98e6-4754-bdb4-c42943e3fa5a" />
+
+KeplerDB is a lightweight, high-performance embedded key-value store written in Rust.  
+It implements core components of modern LSM-tree-based databases, including WAL (Write-Ahead Logging), MemTables, background flush workers, and manifest logging for crash-safe recovery.
+- **Write-Ahead Log (WAL)** for durability
+- **MemTable (BTreeMap)** for fast in-memory writes
+- **Flush Worker** for async flushing to on-disk SST files
+- **Manifest Logging** for recoverable metadata persistence
+- **Threaded Architecture** (WAL writer, flush worker, manifest writer)
+- **Crash Recovery** from WAL and Manifest
+- **Minimal Dependencies**, Zero External Storage Engines
+
+---
+## How to use
+```rust
+use KeplerDB::*;
+
+// create new DB
+let db = KeplerDB::new("test")?;
+
+// store data
+db.insert("hello", "world")?;
+
+// retrieve data
+db.get("hello")?;
+
+// remove data
+db.remove("remove")?;
+```
+---
+
+## 📐 Architecture
+
+<img width="535" height="537" alt="Screenshot 2025-12-24 at 1 32 11 AM" src="https://github.com/user-attachments/assets/3ce44692-3a4b-4fee-bc9e-23754b412ae2" />
+
+---
+
+## 🧪 Testing (TODO)
+
+- [ ] Unit tests for `MemTable`, `WAL`, and `Manifest`
+- [ ] Integration tests with crash recovery scenarios
+- [ ] Performance benchmarks for write/read throughput
+
+---
+
+## 📚 Documentation (TODO)
+
+- [ ] Public API doc comments (`///`)
+- [ ] Module-level documentation
+- [ ] Example usage
+
+---
+
+## 🔧 Planned Features
+
+- [ ] **Compaction** (SST merging)
+- [ ] **CLI interface** for interaction
+- [ ] **Batch write support**
+- [ ] More sophisticated **error handling patterns**
+- [ ] Value format optimizations
+- [ ] SST indexing for range queries
+
+---
+
+## 📂 Current Module Breakdown
+
+| Module         | Description                                  |
+|----------------|----------------------------------------------|
+| `db.rs`        | Entry point of KeplerDB (API interface)      |
+| `memtable.rs`  | In-memory BTreeMap with seqno tracking       |
+| `wal_writer.rs`| WAL write logic + append/fsync               |
+| `flush_worker.rs` | SST writer + flush thread                 |
+| `recovery.rs`  | Recovery logic from WAL + manifest           |
+| `manifest.rs`  | Metadata append log for SSTs                 |
+| `value.rs`     | Value enum (Data, Tombstone) abstraction     |
+| `error.rs`     | Custom error type `KeplerErr`                |
+| `constants.rs` | Constants for file paths, formats, etc.      |
+| `utils.rs`     | Helper utilities and abstractions            |
+
+---
+
+## 🚀 Status
+
+> ✅ MVP complete  
+> 🔧 Currently adding tests, docs, and CLI  
+> 🧪 Planning performance evaluation and benchmarks  
+> 🧠 Designed for learning and future extension into full DB/FS engines
+
+---
+
+## 📝 License
+
+MIT
+
