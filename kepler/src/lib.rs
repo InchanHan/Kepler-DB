@@ -1,9 +1,14 @@
-pub mod constants;
-pub mod db;
-pub mod error;
-pub mod flush_worker;
-pub mod memtable;
-pub mod recovery;
-pub mod utils;
-pub mod wal_writer;
-pub mod value;
+mod constants;
+mod db;
+mod error;
+mod flush_worker;
+mod memtable;
+mod recovery;
+mod utils;
+mod wal_writer;
+mod value;
+
+pub use {
+    crate::db::Kepler,
+    crate::error::{KeplerResult, KeplerErr},
+};

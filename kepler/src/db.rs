@@ -22,7 +22,7 @@ use std::{
     thread,
 };
 
-struct Kepler(Arc<KeplerInner>);
+pub struct Kepler(Arc<KeplerInner>);
 
 pub(crate) struct KeplerInner {
     active: RwLock<MemTable>,
@@ -96,7 +96,14 @@ impl KeplerInner {
                 .path
                 .as_path()
                 .join(format!("sst-{:06}.log", file_id));
-            let data = fs::read(current_sst_path)?;
+            let data = match fs::read(current_sst_path) {
+                Ok(d) => d,
+                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    file_id -= 1;
+                    continue;
+                },
+                Err(e) => return Err(e.into()),
+            };
             let data_len = data.len();
             let mut idx = 0;
 

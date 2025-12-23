@@ -51,7 +51,7 @@ pub struct FlushWorker {
 }
 
 impl FlushWorker {
-    pub(crate) fn new(path: PathBuf) -> (Self, mpsc::Receiver<FlushResult>) {
+    pub fn new(path: PathBuf) -> (Self, mpsc::Receiver<FlushResult>) {
         let (sender, rx) = mpsc::sync_channel::<FlushConfig>(4);
         let (result_tx, result_rx) = mpsc::sync_channel::<FlushResult>(4);
         let _ = thread::spawn(move || {
@@ -65,7 +65,7 @@ impl FlushWorker {
         (Self { sender }, result_rx)
     }
 
-    pub(crate) fn send(&self, cfg: FlushConfig) {
+    pub fn send(&self, cfg: FlushConfig) {
         let _ = self.sender.send(cfg);
     }
 }
