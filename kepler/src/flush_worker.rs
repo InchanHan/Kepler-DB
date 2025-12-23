@@ -1,5 +1,14 @@
-use std::{fs::{File, OpenOptions}, io::Write, path::{Path, PathBuf}, sync::{Arc, mpsc::{self, SyncSender, sync_channel}}, thread};
 use bytes::Bytes;
+use std::{
+    fs::{File, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    sync::{
+        Arc,
+        mpsc::{self, SyncSender, sync_channel},
+    },
+    thread,
+};
 
 use crate::{db::Value, memtable::MemTable};
 
@@ -17,13 +26,21 @@ pub struct FlushResult {
 
 impl FlushResult {
     pub fn new(type_num: u8, sstno: u64, max_seqno: u64, min_seqno: u64) -> Self {
-        Self { type_num, sstno, max_seqno, min_seqno }
-    } 
+        Self {
+            type_num,
+            sstno,
+            max_seqno,
+            min_seqno,
+        }
+    }
 }
 
 impl FlushConfig {
     pub fn new(mem: MemTable, sstno: u64) -> Self {
-        Self { memtable: Arc::new(mem), sstno, }
+        Self {
+            memtable: Arc::new(mem),
+            sstno,
+        }
     }
 }
 
@@ -51,7 +68,7 @@ impl FlushWorker {
 
 pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
     let sst_file_path = path.join(format!("sst/sst-{:06}.log", cfg.sstno));
-    
+
     let mut sst = OpenOptions::new()
         .create(true)
         .write(true)
@@ -62,8 +79,11 @@ pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
     let mut max_seqno: u64 = 0;
     let mut min_seqno: u64 = 0;
     for (key, (seqno, val)) in tree.iter() {
-        if max_seqno < *seqno { max_seqno = *seqno; }
-        else if *seqno < min_seqno { min_seqno = *seqno; }
+        if max_seqno < *seqno {
+            max_seqno = *seqno;
+        } else if *seqno < min_seqno {
+            min_seqno = *seqno;
+        }
 
         let (flag, val): (u8, &[u8]) = match val {
             Value::Data(b) => (0, b.as_ref()),
@@ -81,6 +101,6 @@ pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
         sst.write_all(val);
         sst.sync_all().unwrap();
     }
-    
+
     FlushResult::new(0, cfg.sstno, max_seqno, min_seqno)
 }

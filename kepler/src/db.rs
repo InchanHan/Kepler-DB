@@ -1,7 +1,24 @@
-use crate::{utils::from_le_to_u64, flush_worker::{self, FlushConfig, FlushResult, FlushWorker}, recovery::replay, memtable::MemTable, wal_writer::{self, WalWriter}};
+use crate::{
+    flush_worker::{self, FlushConfig, FlushResult, FlushWorker},
+    memtable::MemTable,
+    recovery::replay,
+    utils::from_le_to_u64,
+    wal_writer::{self, WalWriter},
+};
 use bytes::Bytes;
 use std::{
-    collections::{BTreeMap, VecDeque}, fs::{self, File, OpenOptions}, io::{self, BufReader, Read, Write}, mem::{self, replace}, os::unix::fs::OpenOptionsExt, path::{Path, PathBuf}, sync::{Arc, Mutex, RwLock, atomic::{AtomicU64, Ordering}, mpsc}, thread, u64
+    collections::{BTreeMap, VecDeque},
+    fs::{self, File, OpenOptions},
+    io::{self, BufReader, Read, Write},
+    mem::{self, replace},
+    os::unix::fs::OpenOptionsExt,
+    path::{Path, PathBuf},
+    sync::{
+        Arc, Mutex, RwLock,
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
+    thread, u64,
 };
 
 const ACTIVE_MAX_CAP: u64 = 32 * 1024 * 1024;
@@ -45,7 +62,13 @@ impl KeplerInner {
     }
 
     pub fn get(&self, key: &[u8]) -> io::Result<Option<Bytes>> {
-        if let Some((_, v)) = self.active.read().unwrap().tree.get(&Bytes::copy_from_slice(key)) {
+        if let Some((_, v)) = self
+            .active
+            .read()
+            .unwrap()
+            .tree
+            .get(&Bytes::copy_from_slice(key))
+        {
             match v {
                 Value::Data(b) => return Ok(Some(b.clone())),
                 Value::Tombstone => return Ok(None),
@@ -57,7 +80,10 @@ impl KeplerInner {
         let mut val_return = None;
 
         while current_file_id <= latest_file_id {
-            let current_sst_path = self.path.as_path().join(format!("sst-{:06}.log", current_file_id));
+            let current_sst_path = self
+                .path
+                .as_path()
+                .join(format!("sst-{:06}.log", current_file_id));
             let data: &[u8] = &fs::read(current_sst_path).unwrap();
             let data_len = data.len();
             let mut idx = 0;
@@ -104,25 +130,22 @@ impl KeplerInner {
             None
         };
         drop(active_ptr);
-        
+
         if let Some(old) = old {
-            let sstno = self.seqno.fetch_add(1,Ordering::Relaxed);
+            let sstno = self.seqno.fetch_add(1, Ordering::Relaxed);
             let cfg = FlushConfig::new(old, sstno);
             let _ = self.flush_queue.sender.send(cfg);
         };
-   
+
         Ok(())
     }
 }
 
 pub fn manifest_writer(path: PathBuf, rx: mpsc::Receiver<FlushResult>) {
     let _ = thread::spawn(move || {
-        let mut manifest = OpenOptions::new()
-            .append(true)
-            .open(path)
-            .unwrap();
+        let mut manifest = OpenOptions::new().append(true).open(path).unwrap();
         while let Ok(result) = rx.recv() {
-        // type(1) + sstno(8) + max_seqno(8) + min_seqno(8)
+            // type(1) + sstno(8) + max_seqno(8) + min_seqno(8)
             let type_num = result.type_num;
             let sstno = result.sstno;
             let max_seqno = result.max_seqno;
@@ -136,5 +159,3 @@ pub fn manifest_writer(path: PathBuf, rx: mpsc::Receiver<FlushResult>) {
         }
     });
 }
-
-

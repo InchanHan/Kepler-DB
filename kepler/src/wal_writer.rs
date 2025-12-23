@@ -1,9 +1,10 @@
-use crate::db::Value;
-use bytes::Bytes;
+use crate::{
+    constants::WAL_SEGMENTS_MAX,
+    error::{KeplerErr, KeplerResult},
+};
 use std::{
-    fmt,
     fs::{self, File, OpenOptions},
-    io::{self, Write},
+    io::Write,
     path::{Path, PathBuf},
 };
 
@@ -17,10 +18,8 @@ pub struct WalWriter {
     bytes_written: u64,
 }
 
-const WAL_SEGEMNETS_MAX: u64 = 64 * 1024 * 1024;
-
 impl WalWriter {
-    pub(crate) fn new(root: &Path) -> io::Result<Self> {
+    pub(crate) fn new(root: &Path) -> KeplerResult<Self> {
         let wal_dir = root.join("wal");
         fs::create_dir_all(&wal_dir)?;
 
@@ -40,12 +39,12 @@ impl WalWriter {
         })
     }
 
-    pub(crate) fn put(&mut self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> io::Result<()> {
+    pub(crate) fn put(&mut self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> KeplerResult<()> {
         let type_num: u8 = if val.is_some() { 0 } else { 1 };
         let key_len = key.len() as u32;
         let val_len = val.map(|v| v.len() as u32).unwrap_or(0);
 
-        self.wal.write_all(&seqno.to_le_bytes())?;
+        let _ = self.wal.write_all(&seqno.to_le_bytes())?;
         self.wal.write_all(&[type_num])?;
         self.wal.write_all(&key_len.to_le_bytes())?;
         self.wal.write_all(&val_len.to_le_bytes())?;
@@ -56,18 +55,21 @@ impl WalWriter {
         self.wal.sync_all()?;
         self.bytes_written += 8 + 1 + 4 + 4 + key_len as u64 + val_len as u64;
 
-        if self.bytes_written >= WAL_SEGEMNETS_MAX {
+        if self.bytes_written >= WAL_SEGMENTS_MAX {
             self.rotate()?;
         }
 
         Ok(())
     }
 
-    pub fn rotate(&mut self) -> io::Result<()> {
+    pub fn rotate(&mut self) -> KeplerResult<()> {
         self.wal.sync_all()?;
 
         let mut path = self.path.clone();
-        path.pop();
+
+        if path.pop() == false {
+            return Err(KeplerErr::Wal("couldn't find path, which is fatal!".into()));
+        }
 
         let next_id = FileId(self.id.0 + 1);
         let next_path = path.join(format!("wal-{:06}.log", self.id.0));
@@ -86,7 +88,7 @@ impl WalWriter {
     }
 }
 
-pub fn find_latest_file(wal_dir: &Path) -> io::Result<Option<(FileId, PathBuf)>> {
+pub fn find_latest_file(wal_dir: &Path) -> KeplerResult<Option<(FileId, PathBuf)>> {
     let mut file_set: Vec<(FileId, PathBuf)> = Vec::new();
 
     if !wal_dir.exists() {

@@ -1,5 +1,5 @@
-use std::{fs, path::Path};
 use crate::utils::from_le_to_u64;
+use std::{fs, path::Path};
 
 use bytes::Bytes;
 
@@ -15,7 +15,7 @@ pub fn replay(path: &Path) -> (u64, u64, MemTable) {
 }
 
 pub fn replay_sst(path: &Path) -> (u64, u64) {
-    /// manifest form = type(1) + sstno(8) + max_seqno(8) + min_seqno(8) 
+    /// manifest form = type(1) + sstno(8) + max_seqno(8) + min_seqno(8)
     let manifest_path = path.join("manifest");
     let data: &[u8] = &fs::read(manifest_path).unwrap();
     let data_len = data.len();
@@ -26,7 +26,9 @@ pub fn replay_sst(path: &Path) -> (u64, u64) {
     while idx + 25 <= data_len {
         let sstno = from_le_to_u64(data, idx + 1, idx + 9);
         max_seqno = from_le_to_u64(data, idx + 9, idx + 17);
-        if max_sstno < sstno { max_sstno = sstno; }
+        if max_sstno < sstno {
+            max_sstno = sstno;
+        }
         idx += 25;
     }
 
@@ -39,7 +41,7 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
     let value_slice = match latest_wal {
         None => {
             return None;
-        },
+        }
         Some(s) => s,
     };
 
@@ -53,7 +55,7 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
         let data: &[u8] = &fs::read(current_wal_path).unwrap();
         let data_len = data.len();
         let mut idx = 0;
-        
+
         while idx <= data_len {
             let seqno = from_le_to_u64(data, idx, idx + 8);
             let key_len = from_le_to_u64(data, idx + 9, idx + 13) as usize;
@@ -65,8 +67,10 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
                 let new_key = Bytes::copy_from_slice(&data[idx + 17..idx + 17 + key_len]);
                 let new_val = if type_num == 0 {
                     let val = &data[(idx + 17 + key_len)..(idx + 17 + key_len + val_len)];
-                    Value::Data(Bytes::copy_from_slice(val)) 
-                } else { Value::Tombstone };
+                    Value::Data(Bytes::copy_from_slice(val))
+                } else {
+                    Value::Tombstone
+                };
 
                 temp_active.put(seqno, new_key, new_val);
             }
@@ -79,4 +83,3 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> Option<(MemTable, u64)> {
 
     Some((temp_active, seqno_return))
 }
-
