@@ -1,16 +1,18 @@
-use bytes::Bytes;
 use std::{
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::Write,
     path::{Path, PathBuf},
     sync::{
         Arc,
-        mpsc::{self, SyncSender, sync_channel},
+        mpsc,
     },
     thread,
 };
-
-use crate::{db::Value, memtable::MemTable};
+use crate::{
+    db::Value,
+    memtable::MemTable,
+    error::KeplerResult,
+};
 
 pub struct FlushConfig {
     memtable: Arc<MemTable>,
@@ -54,8 +56,10 @@ impl FlushWorker {
         let (result_tx, result_rx) = mpsc::sync_channel::<FlushResult>(4);
         let _ = thread::spawn(move || {
             while let Ok(cfg) = rx.recv() {
-                let result = flush_one(&path, cfg);
-                result_tx.send(result);
+                match flush_one(&path, cfg) {
+                    Ok(result) => { result_tx.send(result); },
+                    Err(_) => panic!("Flush Worker: failed to flush data in memory, which is fatal!"),
+                }
             }
         });
         (Self { sender }, result_rx)
@@ -66,14 +70,13 @@ impl FlushWorker {
     }
 }
 
-pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
+pub fn flush_one(path: &Path, cfg: FlushConfig) -> KeplerResult<FlushResult> {
     let sst_file_path = path.join(format!("sst/sst-{:06}.log", cfg.sstno));
 
     let mut sst = OpenOptions::new()
         .create(true)
         .write(true)
-        .open(&sst_file_path)
-        .unwrap();
+        .open(&sst_file_path)?;
 
     let tree = &cfg.memtable.tree;
     let mut max_seqno: u64 = 0;
@@ -90,17 +93,17 @@ pub fn flush_one(path: &Path, cfg: FlushConfig) -> FlushResult {
             Value::Tombstone => (1, &[]),
         };
 
-        /// seqno(8) + flag(1) + key_len(4) + val_len(4) + key(?) + val(?)
+        // seqno(8) + flag(1) + key_len(4) + val_len(4) + key(?) + val(?)
         let key_len = key.len() as u32;
         let val_len = val.len() as u32;
-        sst.write_all(&seqno.to_le_bytes());
-        sst.write_all(&[flag]);
-        sst.write_all(&key_len.to_le_bytes());
-        sst.write_all(&val_len.to_le_bytes());
-        sst.write_all(key);
-        sst.write_all(val);
-        sst.sync_all().unwrap();
+        sst.write_all(&seqno.to_le_bytes())?;
+        sst.write_all(&[flag])?;
+        sst.write_all(&key_len.to_le_bytes())?;
+        sst.write_all(&val_len.to_le_bytes())?;
+        sst.write_all(key)?;
+        sst.write_all(val)?;
+        sst.sync_all()?;
     }
 
-    FlushResult::new(0, cfg.sstno, max_seqno, min_seqno)
+    Ok(FlushResult::new(0, cfg.sstno, max_seqno, min_seqno))
 }
