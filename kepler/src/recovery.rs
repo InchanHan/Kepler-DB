@@ -1,9 +1,5 @@
 use crate::{
-    utils::from_le_to_u64,
-    value::Value,
-    memtable::MemTable,
-    wal_writer::find_latest_file,
-    error::{KeplerResult, KeplerErr},
+    error::{KeplerErr, KeplerResult}, memtable::MemTable, utils::{from_le_to_u32, from_le_to_u64}, value::Value, wal_writer::find_latest_file
 };
 use std::{fs, path::Path};
 use bytes::Bytes;
@@ -59,14 +55,14 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> KeplerResult<Option<(MemTable,
         let data_len = data.len();
         let mut idx = 0;
 
-        while idx <= data_len {
+        while idx + 17 <= data_len {
             let seqno = from_le_to_u64(&data, idx, idx + 8)?;
-            let key_len = from_le_to_u64(&data, idx + 9, idx + 13)? as usize;
-            let val_len = from_le_to_u64(&data, idx + 13, idx + 17)? as usize;
+            let key_len = from_le_to_u32(&data, idx + 9, idx + 13)? as usize;
+            let val_len = from_le_to_u32(&data, idx + 13, idx + 17)? as usize;
 
             if max_seqno < seqno {
                 seqno_return = seqno;
-                let type_num: u8 = data[idx + 1];
+                let type_num: u8 = data[idx + 8];
                 let _ = data.get(1..2);
                 let new_key = Bytes::copy_from_slice(data
                     .get(idx + 17..idx + 17 + key_len)

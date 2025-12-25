@@ -71,11 +71,11 @@ impl FlushWorker {
 }
 
 pub fn flush_one(path: &Path, cfg: FlushConfig) -> KeplerResult<FlushResult> {
-    let sst_file_path = path.join(format!("sst/sst-{:06}.log", cfg.sstno));
+    let sst_file_path = path.join("sst").join(format!("sst-{:06}.log", cfg.sstno));
 
     let mut sst = OpenOptions::new()
         .create(true)
-        .write(true)
+        .append(true)
         .open(&sst_file_path)?;
 
     let tree = &cfg.memtable.tree;

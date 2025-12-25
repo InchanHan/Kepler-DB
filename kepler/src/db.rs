@@ -1,25 +1,13 @@
 use crate::{
-    flush_worker::{FlushConfig, FlushResult, FlushWorker},
-    memtable::MemTable,
-    recovery::replay,
-    utils::from_le_to_u64,
-    wal_writer::WalWriter,
-    error::{KeplerResult,KeplerErr},
-    constants::ACTIVE_CAP_MAX,
-    value::Value
+    constants::ACTIVE_CAP_MAX, error::{KeplerErr, KeplerResult}, flush_worker::{FlushConfig, FlushResult, FlushWorker}, memtable::MemTable, recovery::replay, utils::{from_le_to_u32, from_le_to_u64}, value::Value, wal_writer::WalWriter
 };
 use bytes::Bytes;
 use std::{
-    fs::{self, File, OpenOptions},
-    io::Write,
-    mem,
-    path::{Path, PathBuf},
-    sync::{
+    fs::{self, OpenOptions}, io::Write, mem, path::{Path, PathBuf}, sync::{
         Arc, Mutex, RwLock,
         atomic::{AtomicU64, Ordering},
         mpsc,
-    },
-    thread,
+    }, thread
 };
 
 pub struct Kepler(Arc<KeplerInner>);
@@ -56,7 +44,10 @@ impl KeplerInner {
         let sst_dir = path.join("sst");
         let manifest_path = path.join("manifest");
         fs::create_dir_all(&sst_dir)?;
-        File::create(&manifest_path)?;
+        OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&manifest_path)?;
 
         let (seqno, sstno, mem_table) = replay(path)?;
         let wal_writer = WalWriter::new(path)?;
@@ -95,6 +86,7 @@ impl KeplerInner {
             let current_sst_path = self
                 .path
                 .as_path()
+                .join("sst")
                 .join(format!("sst-{:06}.log", file_id));
             let data = match fs::read(current_sst_path) {
                 Ok(d) => d,
@@ -102,15 +94,15 @@ impl KeplerInner {
                     file_id -= 1;
                     continue;
                 },
-                Err(e) => return Err(e.into()),
+                Err(e) => return Err(e.into()), 
             };
             let data_len = data.len();
             let mut idx = 0;
 
-            while idx <= data_len && seek_flag == false {
-                let flag: u8 = data[idx + 1];
-                let key_len = from_le_to_u64(&data, idx + 9, idx + 13)? as usize;
-                let val_len = from_le_to_u64(&data, idx + 13, idx + 17)? as usize;
+            while idx + 17 <= data_len && !seek_flag {
+                let flag: u8 = data[idx + 8];
+                let key_len = from_le_to_u32(&data, idx + 9, idx + 13)? as usize;
+                let val_len = from_le_to_u32(&data, idx + 13, idx + 17)? as usize;
                 let found_key = data
                     .get(idx + 17..idx + 17 + key_len)
                     .ok_or(KeplerErr::Wal(format!(
@@ -129,7 +121,7 @@ impl KeplerInner {
                     match flag {
                         0 => val_return = Some(val_bytes),
                         1 => val_return = None,
-                        _ => return Err(KeplerErr::Wal("WAL corrupted!".into())),
+                        _ => return Err(KeplerErr::CorruptedSst(0)),
                     }
                 }
 
@@ -165,7 +157,7 @@ impl KeplerInner {
         drop(active_ptr);
 
         if let Some(old) = old {
-            let sstno = self.seqno.fetch_add(1, Ordering::Relaxed);
+            let sstno = self.sstno.fetch_add(1, Ordering::Relaxed);
             let cfg = FlushConfig::new(old, sstno);
             let _ = self.flush_queue.sender.send(cfg);
         };

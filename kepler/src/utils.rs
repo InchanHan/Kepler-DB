@@ -8,3 +8,12 @@ pub fn from_le_to_u64(data: &[u8], start_idx: usize, end_idx: usize) -> KeplerRe
     arr.copy_from_slice(&data[start_idx..end_idx]);
     Ok(u64::from_le_bytes(arr))
 }
+
+pub fn from_le_to_u32(data: &[u8], start_idx: usize, end_idx: usize) -> KeplerResult<u32>{
+    if data.len() < 8 {
+        return Err(KeplerErr::CorruptedSst(0));
+    }
+    let mut arr = [0u8; 4];
+    arr.copy_from_slice(&data[start_idx..end_idx]);
+    Ok(u32::from_le_bytes(arr))
+}
