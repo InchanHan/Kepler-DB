@@ -11,7 +11,7 @@ pub fn replay(path: &Path) -> KeplerResult<(u64, u64, MemTable)> {
         return Ok((seq + 1, max_sstno + 1, mem));
     }
 
-    Ok((max_seqno, max_sstno, MemTable::new()))
+    Ok((max_seqno + 1, max_sstno + 1, MemTable::new()))
 }
 
 pub fn replay_sst(path: &Path) -> KeplerResult<(u64, u64)> {
