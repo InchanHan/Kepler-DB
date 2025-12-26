@@ -7,6 +7,7 @@ mod recovery;
 mod utils;
 mod wal_writer;
 mod value;
+mod imm_memtable;
 
 pub use {
     crate::db::Kepler,

@@ -9,9 +9,7 @@ use std::{
     thread,
 };
 use crate::{
-    value::Value,
-    memtable::MemTable,
-    error::KeplerResult,
+    error::KeplerResult, imm_memtable::ImmTables, memtable::MemTable, value::Value
 };
 
 pub struct FlushConfig {
@@ -38,9 +36,9 @@ impl FlushResult {
 }
 
 impl FlushConfig {
-    pub fn new(mem: MemTable, sstno: u64) -> Self {
+    pub fn new(memtable: Arc<MemTable>, sstno: u64) -> Self {
         Self {
-            memtable: Arc::new(mem),
+            memtable,
             sstno,
         }
     }
@@ -51,13 +49,17 @@ pub struct FlushWorker {
 }
 
 impl FlushWorker {
-    pub fn new(path: PathBuf) -> (Self, mpsc::Receiver<FlushResult>) {
+    pub fn new(path: &Path, imm_tables: Arc<ImmTables>) -> (Self, mpsc::Receiver<FlushResult>) {
         let (sender, rx) = mpsc::sync_channel::<FlushConfig>(4);
         let (result_tx, result_rx) = mpsc::sync_channel::<FlushResult>(4);
+        let path = path.to_path_buf();
         let _ = thread::spawn(move || {
             while let Ok(cfg) = rx.recv() {
                 match flush_one(&path, cfg) {
-                    Ok(result) => { let _ = result_tx.send(result); },
+                    Ok(result) => {
+                        let _ = result_tx.send(result);
+                        imm_tables.tables.lock().unwrap().pop_front();                    
+                    },
                     Err(_) => panic!("Flush Worker: failed to flush data in memory, which is fatal!"),
                 }
             }

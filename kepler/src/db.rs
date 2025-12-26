@@ -1,5 +1,5 @@
 use crate::{
-    constants::ACTIVE_CAP_MAX, error::{KeplerErr, KeplerResult}, flush_worker::{FlushConfig, FlushResult, FlushWorker}, memtable::MemTable, recovery::replay, utils::{from_le_to_u32, from_le_to_u64}, value::Value, wal_writer::WalWriter
+    constants::ACTIVE_CAP_MAX, error::{KeplerErr, KeplerResult}, flush_worker::{FlushConfig, FlushResult, FlushWorker}, imm_memtable::ImmTables, memtable::MemTable, recovery::replay, utils::from_le_to_u32, value::Value, wal_writer::WalWriter
 };
 use bytes::Bytes;
 use std::{
@@ -14,7 +14,8 @@ pub struct Kepler(Arc<KeplerInner>);
 
 pub(crate) struct KeplerInner {
     active: RwLock<MemTable>,
-    flush_queue: FlushWorker,
+    imm_tables: Arc<ImmTables>,
+    flush_worker: FlushWorker,
     wal: Mutex<WalWriter>,
     seqno: AtomicU64,
     sstno: AtomicU64,
@@ -51,12 +52,14 @@ impl KeplerInner {
 
         let (seqno, sstno, mem_table) = replay(path)?;
         let wal_writer = WalWriter::new(path)?;
-        let (flush_worker, flush_result_rx) = FlushWorker::new(path.to_path_buf());
+        let imm_tables = Arc::new(ImmTables::new());
+        let (flush_worker, flush_result_rx) = FlushWorker::new(path, imm_tables.clone());
         manifest_writer(manifest_path, flush_result_rx);
 
         Ok(Self {
             active: RwLock::new(mem_table),
-            flush_queue: flush_worker,
+            imm_tables,
+            flush_worker,
             wal: Mutex::new(wal_writer),
             seqno: AtomicU64::new(seqno),
             sstno: AtomicU64::new(sstno),
@@ -77,6 +80,16 @@ impl KeplerInner {
                 Value::Tombstone => return Ok(None),
             }
         };
+    
+        for table in self.imm_tables.tables.lock().unwrap().iter() {
+            if let Some((_, v)) = table.tree.get(&Bytes::copy_from_slice(key)) {
+                match v {
+                    Value::Data(b) => return Ok(Some(b.clone())),
+                    Value::Tombstone => return Ok(None),
+                }
+            }
+        }
+
         // seqno(8) + flag(1) + key_len(4) + val_len(4) + key(?) + val(?)
         let mut file_id = self.sstno.load(Ordering::Relaxed);
         let mut val_return = None;
@@ -149,18 +162,14 @@ impl KeplerInner {
         let mut active_ptr = self.active.write().map_err(|_| KeplerErr::Memory("Lock posisoned. Can't access to the Memory".into()))?;
         active_ptr.put(seqno, key_bytes, val_value);
 
-        let old = if active_ptr.bytes_written >= ACTIVE_CAP_MAX {
-            Some(mem::replace(&mut *active_ptr, MemTable::new()))
-        } else {
-            None
-        };
+        if active_ptr.bytes_written >= ACTIVE_CAP_MAX {
+            let old = Arc::new(mem::replace(&mut *active_ptr, MemTable::new()));
+            self.imm_tables.tables.lock().unwrap().push_back(old.clone());
+            let sstno = self.sstno.fetch_and(1, Ordering::Relaxed);
+            let cfg = FlushConfig::new(old.clone(), sstno);
+            let _ = self.flush_worker.sender.send(cfg);
+        }
         drop(active_ptr);
-
-        if let Some(old) = old {
-            let sstno = self.sstno.fetch_add(1, Ordering::Relaxed);
-            let cfg = FlushConfig::new(old, sstno);
-            let _ = self.flush_queue.sender.send(cfg);
-        };
 
         Ok(())
     }
