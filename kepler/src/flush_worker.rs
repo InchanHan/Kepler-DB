@@ -58,7 +58,7 @@ impl FlushWorker {
                 match flush_one(&path, cfg) {
                     Ok(result) => {
                         let _ = result_tx.send(result);
-                        imm_tables.tables.lock().unwrap().pop_front();                    
+                        imm_tables.0.lock().unwrap().pop_front();                    
                     },
                     Err(_) => panic!("Flush Worker: failed to flush data in memory, which is fatal!"),
                 }

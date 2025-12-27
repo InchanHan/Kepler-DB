@@ -13,10 +13,10 @@ use std::{
 pub struct Kepler(Arc<KeplerInner>);
 
 pub(crate) struct KeplerInner {
-    active: RwLock<MemTable>,
+    active_table: RwLock<MemTable>,
     imm_tables: Arc<ImmTables>,
     flush_worker: FlushWorker,
-    wal: Mutex<WalWriter>,
+    wal_writer: Mutex<WalWriter>,
     seqno: AtomicU64,
     sstno: AtomicU64,
     path: PathBuf,
@@ -42,25 +42,17 @@ impl Kepler {
 
 impl KeplerInner {
     pub fn new(path: &Path) -> KeplerResult<Self> {
-        let sst_dir = path.join("sst");
-        let manifest_path = path.join("manifest");
-        fs::create_dir_all(&sst_dir)?;
-        OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&manifest_path)?;
-
-        let (seqno, sstno, mem_table) = replay(path)?;
-        let wal_writer = WalWriter::new(path)?;
+        build_files(path)?;
+        let (seqno, sstno, mem) = replay(path)?;
         let imm_tables = Arc::new(ImmTables::new());
         let (flush_worker, flush_result_rx) = FlushWorker::new(path, imm_tables.clone());
-        manifest_writer(manifest_path, flush_result_rx);
+        generate_manifest_manager(path, flush_result_rx);
 
         Ok(Self {
-            active: RwLock::new(mem_table),
+            active_table: RwLock::new(mem),
             imm_tables,
             flush_worker,
-            wal: Mutex::new(wal_writer),
+            wal_writer: Mutex::new(WalWriter::new(path)?),
             seqno: AtomicU64::new(seqno),
             sstno: AtomicU64::new(sstno),
             path: path.to_path_buf(),
@@ -68,10 +60,11 @@ impl KeplerInner {
     }
 
     pub fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
+        // try to retrieve data from active
         if let Some((_, v)) = self
-            .active
+            .active_table
             .read()
-            .map_err(|_| KeplerErr::Memory("Lock poisoned".into()))?
+            .map_err(|_| KeplerErr::LockPoisoned)?
             .tree
             .get(&Bytes::copy_from_slice(key))
         {
@@ -80,8 +73,9 @@ impl KeplerInner {
                 Value::Tombstone => return Ok(None),
             }
         };
-    
-        for table in self.imm_tables.tables.lock().unwrap().iter() {
+
+        // try to retrieve data from imm_tables
+        for table in self.imm_tables.0.lock().unwrap().iter() {
             if let Some((_, v)) = table.tree.get(&Bytes::copy_from_slice(key)) {
                 match v {
                     Value::Data(b) => return Ok(Some(b.clone())),
@@ -91,23 +85,23 @@ impl KeplerInner {
         }
 
         // seqno(8) + flag(1) + key_len(4) + val_len(4) + key(?) + val(?)
-        let mut file_id = self.sstno.load(Ordering::Relaxed);
+        let load_sstno_id =  self.sstno.load(Ordering::Relaxed);
+        let mut file_id = if load_sstno_id > 0 { load_sstno_id - 1 } else { load_sstno_id };
         let mut val_return = None;
         let mut seek_flag = false;
 
         while file_id >= 1 {
             let current_sst_path = self
                 .path
-                .as_path()
                 .join("sst")
                 .join(format!("sst-{:06}.log", file_id));
-            let data = match fs::read(current_sst_path) {
+            let data = match fs::read(&current_sst_path) {
                 Ok(d) => d,
-                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                     file_id -= 1;
                     continue;
-                },
-                Err(e) => return Err(e.into()), 
+                }
+                Err(e) => return Err(e.into()),
             };
             let data_len = data.len();
             let mut idx = 0;
@@ -118,16 +112,10 @@ impl KeplerInner {
                 let val_len = from_le_to_u32(&data, idx + 13, idx + 17)? as usize;
                 let found_key = data
                     .get(idx + 17..idx + 17 + key_len)
-                    .ok_or(KeplerErr::Wal(format!(
-                        "failed to read Key from WAL, which is fatal! Bytes offset is [{}..{}]",
-                        idx + 17,
-                        idx + 17 + key_len)))?;
+                    .ok_or(KeplerErr::IndexOutOfBounds)?;
                 let found_val = data
                     .get(idx + 17 + key_len..idx + 17 + key_len + val_len)
-                    .ok_or(KeplerErr::Wal(format!(
-                        "failed to read Value from WAL, which is fatal! Bytes offset is [{}..{}]",
-                        idx + 17 + key_len,
-                        idx + 17 + key_len + val_len)))?;
+                    .ok_or(KeplerErr::IndexOutOfBounds)?;
                 let val_bytes = Bytes::copy_from_slice(found_val);
                 if found_key == key {
                     seek_flag = true;
@@ -149,23 +137,25 @@ impl KeplerInner {
 
     pub fn insert(&self, key: &[u8], val: Option<&[u8]>) -> KeplerResult<()> {
         let seqno = self.seqno.fetch_add(1, Ordering::Relaxed);
-
-        let mut wal_ptr = self.wal.lock().map_err(|_| KeplerErr::Wal("Lock poisoned. Cannot access to the WalWriter.".into()))?;
+        // write to WAL
+        let mut wal_ptr = self
+            .wal_writer
+            .lock()
+            .map_err(|_| KeplerErr::LockPoisoned)?;
         wal_ptr.put(seqno, key, val)?;
         drop(wal_ptr);
 
-        let key_bytes = Bytes::copy_from_slice(key);
-        let val_value = match val {
-            Some(v) => Value::Data(Bytes::copy_from_slice(v)),
-            None => Value::Tombstone,
-        };
-        let mut active_ptr = self.active.write().map_err(|_| KeplerErr::Memory("Lock posisoned. Can't access to the Memory".into()))?;
-        active_ptr.put(seqno, key_bytes, val_value);
+        // write to active_table
+        let mut active_ptr = self
+            .active_table
+            .write()
+            .map_err(|_| KeplerErr::LockPoisoned)?;
+        active_ptr.put(seqno, key, val);
 
         if active_ptr.bytes_written >= ACTIVE_CAP_MAX {
             let old = Arc::new(mem::replace(&mut *active_ptr, MemTable::new()));
-            self.imm_tables.tables.lock().unwrap().push_back(old.clone());
-            let sstno = self.sstno.fetch_and(1, Ordering::Relaxed);
+            self.imm_tables.0.lock().unwrap().push_back(old.clone());
+            let sstno = self.sstno.fetch_add(1, Ordering::Relaxed);
             let cfg = FlushConfig::new(old.clone(), sstno);
             let _ = self.flush_worker.sender.send(cfg);
         }
@@ -175,12 +165,13 @@ impl KeplerInner {
     }
 }
 
-pub fn manifest_writer(path: PathBuf, rx: mpsc::Receiver<FlushResult>) {
+fn generate_manifest_manager(path: &Path, rx: mpsc::Receiver<FlushResult>) {
+    let manifest_path = path.join("manifest");
     let _ = thread::spawn(move || {
         let mut manifest = OpenOptions::new()
             .append(true)
-            .open(path)
-            .expect("Manifest Writer: failed to open manifest filed.");
+            .open(manifest_path)
+            .expect("Manifest Writer: failed to open manifest file.");
         while let Ok(result) = rx.recv() {
             // type(1) + sstno(8) + max_seqno(8) + min_seqno(8)
             manifest.write_all(&[result.type_num])
@@ -196,3 +187,14 @@ pub fn manifest_writer(path: PathBuf, rx: mpsc::Receiver<FlushResult>) {
         }
     });
 }
+
+fn build_files(path: &Path) -> KeplerResult<()> {
+    fs::create_dir_all(path.join("sst"))?;
+    OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path.join("manifest"))?;
+
+    Ok(())
+}
+

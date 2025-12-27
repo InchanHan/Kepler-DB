@@ -66,20 +66,15 @@ impl WalWriter {
         self.wal.sync_all()?;
 
         let mut path = self.path.clone();
-
-        if path.pop() == false {
-            return Err(KeplerErr::Wal("couldn't find path, which is fatal!".into()));
-        }
-
-        let next_id = FileId(self.id.0 + 1);
-        let next_path = path.join(format!("wal-{:06}.log", self.id.0));
-
+        path.pop();
+        let next_id = self.id.0 + 1;
+        let next_path = path.join(format!("wal-{:06}.log", next_id));
         let next_wal = OpenOptions::new()
             .create(true)
             .append(true)
-            .open(&self.path)?;
+            .open(&next_path)?;
 
-        self.id = next_id;
+        self.id = FileId(next_id);
         self.path = next_path;
         self.wal = next_wal;
         self.bytes_written = 0;

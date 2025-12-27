@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 pub struct MemTable {
     pub tree: BTreeMap<Bytes, (u64, Value)>,
-    pub bytes_written: u64,
+    pub bytes_written: usize,
 }
 
 impl MemTable {
@@ -15,26 +15,26 @@ impl MemTable {
         }
     }
 
-    pub fn put(&mut self, seqno: u64, key: Bytes, val: Value) {
-        let key_len = key.len() as u64;
-        let val_len = match &val {
-            Value::Data(b) => b.len() as u64,
-            Value::Tombstone => 0,
+    pub fn put(&mut self, seqno: u64, key: &[u8], val: Option<&[u8]>) {
+        let (key_len, key_bytes) = (key.len(), Bytes::copy_from_slice(key));
+        let (val_len, val_value) = match val {
+            Some(v) => (v.len(), Value::Data(Bytes::copy_from_slice(v))),
+            None => (0, Value::Tombstone),
         };
 
-        match self.tree.get(&key) {
+        match self.tree.get(&key_bytes) {
             None => {
                 self.bytes_written += 8 + key_len + val_len;
             }
             Some((_, v)) => {
                 let old_val_len = match v {
-                    Value::Data(b) => b.len() as u64,
+                    Value::Data(b) => b.len(),
                     Value::Tombstone => 0,
                 };
                 self.bytes_written = self.bytes_written + val_len - old_val_len;
             }
         }
 
-        self.tree.insert(key, (seqno, val));
+        self.tree.insert(key_bytes, (seqno, val_value));
     }
 }

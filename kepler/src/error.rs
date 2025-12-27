@@ -3,23 +3,27 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum KeplerErr {
-    #[error("I/O error: {0}")]
+
+    #[error("Index out of Bounds!")]
+    IndexOutOfBounds,
+
+    #[error("lock poisoned")]
+    LockPoisoned,
+
+    #[error("I/O error")]
     Io(#[from] io::Error),
 
-    #[error("WAL error: {0}")]
-    Wal(String),
+    #[error("WAL write failed")]
+    WalWrite {
+        #[source]
+        source: io::Error,
+    },
 
-    #[error("Manifest error: {0}")]
-    Manifest(String),
+    #[error("Corrupted Manifest format at byte offset {0}")]
+    ManifestCorrupted(usize),
 
     #[error("Corrupted SST format at byte offset {0}")]
     CorruptedSst(usize),
-
-    #[error("Memory Error: {0}")]
-    Memory(String),
-
-    #[error("Unknown error: {0}")]
-    Unknown(String),
 }
 
 pub type KeplerResult<T> = Result<T, KeplerErr>;

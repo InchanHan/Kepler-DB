@@ -64,25 +64,16 @@ pub fn replay_wal(path: &Path, max_seqno: u64) -> KeplerResult<Option<(MemTable,
                 seqno_return = seqno;
                 let type_num: u8 = data[idx + 8];
                 let _ = data.get(1..2);
-                let new_key = Bytes::copy_from_slice(data
+                let key = data
                     .get(idx + 17..idx + 17 + key_len)
-                    .ok_or(KeplerErr::Wal(format!(
-                        "failed to read Key from WAL, which is fatal! Bytes offset is [{}..{}]",
-                        idx + 17,
-                        idx + 17 + key_len)))?);
-                let new_val = if type_num == 0 {
-                    let val = data
-                        .get(idx + 17 + key_len..idx + 17 + key_len + val_len)
-                        .ok_or(KeplerErr::Wal(format!(
-                            "failed to read Value from WAL, which is fatal! Bytes offset is [{}..{}]",
-                            idx + 17 + key_len,
-                            idx + 17 + key_len + val_len)))?;
-                    Value::Data(Bytes::copy_from_slice(val))
+                    .ok_or(KeplerErr::IndexOutOfBounds)?;
+                let val = if type_num == 0 {
+                    data.get(idx + 17 + key_len..idx + 17 + key_len + val_len)
                 } else {
-                    Value::Tombstone
+                    None
                 };
 
-                temp_active.put(seqno, new_key, new_val);
+                temp_active.put(seqno, key, val);
             }
 
             idx += 8 + 1 + 4 + 4 + key_len + val_len;
