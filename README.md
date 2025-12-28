@@ -1,4 +1,4 @@
-# KeplerDB 🪐
+# KeplerDB 🪐 (MVP completed, now in large refactory)
 KeplerDB is a lightweight, high-performance embedded key-value store written in Rust.  
 It implements core components of modern LSM-tree-based databases, including WAL (Write-Ahead Logging), MemTables, background flush workers, and manifest logging for crash-safe recovery.
 <div align="center">
@@ -87,7 +87,7 @@ fn main() -> KeplerResult<()> {
 ## 🚀 Status
 
 > ✅ MVP complete  
-> 🔧 Currently adding tests, docs, and CLI  
+> 🔧 Currently doing large refactory  
 > 🧪 Planning performance evaluation and benchmarks  
 > 🧠 Designed for learning and future extension into full DB/FS engines
 
