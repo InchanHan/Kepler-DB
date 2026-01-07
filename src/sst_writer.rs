@@ -13,7 +13,7 @@ use memmap2::Mmap;
 
 use crate::{
     bloom::BloomFilter,
-    constants::{LEN_SIZE, MAGIC, OFFSET_SIZE, PAGE_4KB},
+    constants::{BUF_SIZE, LEN_SIZE, MAGIC, OFFSET_SIZE, PAGE_4KB},
     error::{KeplerErr, KeplerResult},
     imm_tables::ImmTables,
     manifest::Manifest,
@@ -128,7 +128,7 @@ fn flush_one(
         .open(&sst_path)?;
 
     let mut buf = BufWriter::new(&sst);
-    let mut buf_2: Vec<u8> = Vec::with_capacity(64 * 1024);
+    let mut buf_2: Vec<u8> = Vec::with_capacity(BUF_SIZE);
 
     let mut filter = BloomFilter::new(table_map.len());
     let mut sparse_index: Vec<SparseIndex> = Vec::new();

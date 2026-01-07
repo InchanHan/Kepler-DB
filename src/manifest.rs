@@ -1,8 +1,5 @@
 use crate::{
-    error::{KeplerErr, KeplerResult},
-    sst_writer::FlushResult,
-    types::WorkerSignal,
-    version::{SSTInfo, Version},
+    constants::BUF_SIZE, error::{KeplerErr, KeplerResult}, sst_writer::FlushResult, types::WorkerSignal, version::{SSTInfo, Version}
 };
 use std::{
     collections::BTreeMap,
@@ -85,7 +82,7 @@ fn restore_sst_list(manifest_path: &Path) -> KeplerResult<Version> {
         .write(true)
         .append(true)
         .open(manifest_path)?;
-    let mut reader = BufReader::with_capacity(64 * 1024, file);
+    let mut reader = BufReader::with_capacity(BUF_SIZE, file);
     let mut sst_list: BTreeMap<u64, SSTInfo> = BTreeMap::new();
     let mut max_seqno = 0;
     let mut max_sstno = 0;
