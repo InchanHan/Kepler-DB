@@ -3,7 +3,7 @@ use crate::{
 };
 use std::{
     collections::BTreeMap,
-    fs::{File, OpenOptions},
+    fs::OpenOptions,
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
     sync::{
