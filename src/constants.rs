@@ -1,0 +1,9 @@
+pub const WAL_CAP_LIMIT: usize = 64 * 1024 * 1024;
+pub const WAL_HEADER_SIZE: usize = 17;
+pub const HASH_SEED: u32 = 3141592;
+pub const HASH_COUNT: usize = 7;
+pub const LEN_SIZE: usize = 4;
+pub const OFFSET_SIZE: usize = 8;
+pub const PAGE_4KB: usize = 4096;
+pub const ACTIVE_CAP_MAX: usize = 32 * 1024 * 1024;
+pub const MAGIC: u64 = 0x3141592653897932;
