@@ -26,15 +26,15 @@ impl Getable for TableSet {
             .map_err(|_| KeplerErr::LockPoisoned)?
             .get(key);
 
-        if let Ok(Some(v)) = get_active {
+        if let Some(v) = get_active? {
             return Ok(Some(v));
         }
 
-        if let Ok(Some(v)) = self.imm_tables.get(key) {
+        if let Some(v) = self.imm_tables.get(key)? {
             return Ok(Some(v));
         }
 
-        if let Ok(Some(v)) = self.sst_manager.get(key) {
+        if let Some(v) = self.sst_manager.get(key)? {
             return Ok(Some(v));
         }
         Ok(None)

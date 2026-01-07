@@ -1,16 +1,21 @@
-pub mod bloom;
-pub mod constants;
-pub mod db;
-pub mod error;
-pub mod imm_tables;
-pub mod journal;
-pub mod manifest;
-pub mod mem_table;
-pub mod sst_manager;
-pub mod sst_writer;
-pub mod sstable;
-pub mod table_set;
-pub mod traits;
-pub mod types;
-pub mod utils;
-pub mod version;
+mod bloom; 
+mod constants;
+mod db;
+mod error;
+mod imm_tables;
+mod journal;
+mod manifest;
+mod mem_table;
+mod sst_manager;
+mod sst_writer;
+mod sstable;
+mod table_set;
+mod traits;
+mod types;
+mod utils;
+mod version;
+
+pub use {
+    db::Kepler,
+    error::KeplerResult,
+};
