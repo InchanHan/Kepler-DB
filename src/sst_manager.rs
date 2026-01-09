@@ -11,26 +11,17 @@ use std::{
 };
 
 use crate::{
+    Error,
     bloom::BloomFilter,
     constants::{LEN_SIZE, MAGIC, OFFSET_SIZE},
-    error::{KeplerErr, KeplerResult},
     sstable::{SSTable, SparseIndex},
     traits::Getable,
     utils::{ensure_dir, from_le_to_u32, from_le_to_u64},
 };
 
 impl Getable for SSTManager {
-    fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
-        let tables = &self.tables.read().map_err(|_| KeplerErr::CorruptedSst(0))?;
-
-        for table in tables.iter().rev() {
-            if table.contains(key) {
-                if let Ok(Some(v)) = table.get(key) {
-                    return Ok(Some(v));
-                }
-            }
-        }
-        Ok(None)
+    fn get(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
+        self.lookup_latest(key)
     }
 }
 
@@ -40,7 +31,7 @@ pub struct SSTManager {
 }
 
 impl SSTManager {
-    pub(crate) fn open(path: &Path, next_sstno: u64) -> KeplerResult<Self> {
+    pub(crate) fn open(path: &Path, next_sstno: u64) -> crate::Result<Self> {
         let tables = recovery_sst(path)?;
 
         Ok(Self {
@@ -53,17 +44,30 @@ impl SSTManager {
         self.id.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub(crate) fn push(&self, table: SSTable) -> KeplerResult<()> {
+    pub(crate) fn push(&self, table: SSTable) -> crate::Result<()> {
         self.tables
             .write()
-            .map_err(|_| KeplerErr::CorruptedSst(0))?
+            .map_err(|_| Error::Concurrency)?
             .push(Arc::new(table));
 
         Ok(())
     }
+
+    fn lookup_latest(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
+        let tables = &self.tables.read().map_err(|_| Error::Concurrency)?;
+
+        for table in tables.iter().rev() {
+            if table.contains(key) {
+                if let Ok(Some(v)) = table.get(key) {
+                    return Ok(Some(v));
+                }
+            }
+        }
+        Ok(None)
+    }
 }
 
-fn recovery_sst(path: &Path) -> KeplerResult<Vec<Arc<SSTable>>> {
+fn recovery_sst(path: &Path) -> crate::Result<Vec<Arc<SSTable>>> {
     let mut tables: Vec<Arc<SSTable>> = Vec::new();
     let sst_dir_path = path.join("sst");
     ensure_dir(&sst_dir_path)?;
@@ -82,7 +86,7 @@ fn recovery_sst(path: &Path) -> KeplerResult<Vec<Arc<SSTable>>> {
         file.read_exact(&mut footer)?;
 
         if u64::from_le_bytes(footer[40..48].try_into().unwrap()) != MAGIC {
-            return Err(KeplerErr::CorruptedSst(0));
+            return Err(Error::Corrupted);
         }
 
         // Footer
@@ -103,7 +107,7 @@ fn recovery_sst(path: &Path) -> KeplerResult<Vec<Arc<SSTable>>> {
     Ok(tables)
 }
 
-fn sparse_idx_from_offset(offset: usize, mmap: &Mmap) -> KeplerResult<Vec<SparseIndex>> {
+fn sparse_idx_from_offset(offset: usize, mmap: &Mmap) -> crate::Result<Vec<SparseIndex>> {
     let mut sparse_index: Vec<SparseIndex> = Vec::new();
     let mut idx_count = from_le_to_u32(mmap, offset, 0, LEN_SIZE)?;
     let mut idx = offset + LEN_SIZE;
@@ -125,7 +129,7 @@ fn sparse_idx_from_offset(offset: usize, mmap: &Mmap) -> KeplerResult<Vec<Sparse
     Ok(sparse_index)
 }
 
-fn bloom_filter_from_offset(offset: usize, mmap: &Mmap) -> KeplerResult<BloomFilter> {
+fn bloom_filter_from_offset(offset: usize, mmap: &Mmap) -> crate::Result<BloomFilter> {
     let filter_len = from_le_to_u32(mmap, offset, 0, LEN_SIZE)? as usize;
     let bit_size = from_le_to_u32(mmap, offset + LEN_SIZE, 0, LEN_SIZE)? as usize;
     let filter_start = offset + LEN_SIZE + LEN_SIZE;

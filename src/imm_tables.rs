@@ -1,49 +1,50 @@
 use std::{
     collections::VecDeque,
-    sync::{Arc, Mutex},
+    sync::{Arc, RwLock},
 };
 
 use bytes::Bytes;
 
 use crate::{
-    error::{KeplerErr, KeplerResult},
+    Error,
     traits::Getable,
     types::{TableMap, Value},
 };
 
 impl Getable for ImmTables {
-    fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
-        let tables = &self.0.lock().map_err(|_| KeplerErr::CorruptedSst(0))?;
-
-        for table in tables.iter().rev() {
-            if let Some((_seqno, Value::Data(v))) = table.get(key) {
-                return Ok(Some(Bytes::copy_from_slice(&v)));
-            }
+    fn get(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
+        match self.lookup_latest(key)? {
+            Some(Value::Data(v)) => Ok(Some(v)),
+            Some(Value::Tombstone) => Ok(None),
+            _ => Ok(None),
         }
-        Ok(None)
     }
 }
 
-pub struct ImmTables(Mutex<VecDeque<Arc<TableMap>>>);
+pub struct ImmTables(RwLock<VecDeque<Arc<TableMap>>>);
 
 impl ImmTables {
     pub fn new() -> Self {
-        Self(Mutex::new(VecDeque::new()))
+        Self(RwLock::new(VecDeque::new()))
     }
 
-    pub fn push_back(&self, tree: Arc<TableMap>) -> KeplerResult<()> {
-        self.0
-            .lock()
-            .map_err(|_| KeplerErr::LockPoisoned)?
-            .push_back(tree);
+    pub fn push_back(&self, tree: Arc<TableMap>) -> crate::Result<()> {
+        self.0.write().map_err(|_| Error::Poisoned)?.push_back(tree);
         Ok(())
     }
 
-    pub fn pop_front(&self) -> KeplerResult<()> {
-        self.0
-            .lock()
-            .map_err(|_| KeplerErr::LockPoisoned)?
-            .pop_front();
-        Ok(())
+    pub fn pop_front(&self) -> crate::Result<Option<Arc<TableMap>>> {
+        Ok(self.0.write().map_err(|_| Error::Poisoned)?.pop_front())
+    }
+
+    fn lookup_latest(&self, key: &[u8]) -> crate::Result<Option<Value>> {
+        let tables = self.0.read().map_err(|_| Error::Poisoned)?;
+
+        for table in tables.iter().rev() {
+            if let Some((_seqno, val)) = table.get(key) {
+                return Ok(Some(val.clone()));
+            }
+        }
+        Ok(None)
     }
 }

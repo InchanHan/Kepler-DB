@@ -2,27 +2,22 @@ use std::io;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-pub enum KeplerErr {
-    #[error("Index out of Bounds!")]
-    IndexOutOfBounds,
-
-    #[error("lock poisoned")]
-    LockPoisoned,
-
+#[non_exhaustive]
+pub enum Error {
     #[error("I/O error")]
     Io(#[from] io::Error),
 
-    #[error("WAL write failed")]
-    WalWrite {
-        #[source]
-        source: io::Error,
-    },
+    #[error("Concurrency failure")]
+    Concurrency,
 
-    #[error("Corrupted Manifest format at byte offset {0}")]
-    ManifestCorrupted(usize),
+    #[error("Wal or Manifest corruption")]
+    Corrupted,
 
-    #[error("Corrupted SST format at byte offset {0}")]
-    CorruptedSst(usize),
+    #[error("Previous write failed; engine poisoned")]
+    Poisoned,
+
+    #[error("engine is unrecoverable")]
+    Unrecoverable,
 }
 
-pub type KeplerResult<T> = Result<T, KeplerErr>;
+pub type Result<T> = std::result::Result<T, Error>;

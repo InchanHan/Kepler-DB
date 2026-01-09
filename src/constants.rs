@@ -7,4 +7,5 @@ pub const OFFSET_SIZE: usize = 8;
 pub const PAGE_4KB: usize = 4096;
 pub const ACTIVE_CAP_MAX: usize = 32 * 1024 * 1024;
 pub const BUF_SIZE: usize = 64 * 1024;
+pub const SEQNO_SIZE: usize = 8;
 pub const MAGIC: u64 = 0x3141592653897932;

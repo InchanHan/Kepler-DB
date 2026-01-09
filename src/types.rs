@@ -1,7 +1,8 @@
 use std::{collections::BTreeMap, sync::Arc};
 
-use crate::error::KeplerErr;
 use bytes::Bytes;
+
+use crate::Error;
 
 #[derive(Clone)]
 pub enum Value {
@@ -12,7 +13,7 @@ pub enum Value {
 pub enum WorkerSignal {
     Flush(Arc<TableMap>),
     Shutdown,
-    Panic(KeplerErr),
+    Panic(Error),
 }
 
 pub type TableMap = BTreeMap<Bytes, (u64, Value)>;

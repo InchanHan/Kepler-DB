@@ -7,8 +7,8 @@ use std::{
 use bytes::Bytes;
 
 use crate::{
+    Error,
     constants::ACTIVE_CAP_MAX,
-    error::{KeplerErr, KeplerResult},
     imm_tables::ImmTables,
     manifest::Manifest,
     mem_table::MemTable,
@@ -19,12 +19,8 @@ use crate::{
 };
 
 impl Getable for TableSet {
-    fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
-        let get_active = self
-            .active
-            .read()
-            .map_err(|_| KeplerErr::LockPoisoned)?
-            .get(key);
+    fn get(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
+        let get_active = self.active.read().map_err(|_| Error::Poisoned)?.get(key);
 
         if let Some(v) = get_active? {
             return Ok(Some(v));
@@ -42,8 +38,8 @@ impl Getable for TableSet {
 }
 
 impl Putable for TableSet {
-    fn put(&self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> KeplerResult<()> {
-        let mut active_ptr = self.active.write().map_err(|_| KeplerErr::LockPoisoned)?;
+    fn put(&self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> crate::Result<()> {
+        let mut active_ptr = self.active.write().map_err(|_| Error::Concurrency)?;
         active_ptr.put(seqno, key, val)?;
 
         if active_ptr.bytes_written() >= ACTIVE_CAP_MAX {
@@ -70,7 +66,7 @@ impl TableSet {
         mem: MemTable,
         manifest: Arc<Manifest>,
         err_tx: Sender<WorkerSignal>,
-    ) -> KeplerResult<Self> {
+    ) -> crate::Result<Self> {
         let active = RwLock::new(mem);
         let imm_tables = Arc::new(ImmTables::new());
         let sst_manager = Arc::new(sst_manager);

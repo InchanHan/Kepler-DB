@@ -1,4 +1,4 @@
-mod bloom; 
+mod bloom;
 mod constants;
 mod db;
 mod error;
@@ -17,5 +17,5 @@ mod version;
 
 pub use {
     db::Kepler,
-    error::KeplerResult,
+    error::{Error, Result},
 };

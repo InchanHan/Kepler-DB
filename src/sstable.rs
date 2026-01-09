@@ -1,7 +1,6 @@
 use crate::{
     bloom::BloomFilter,
     constants::{LEN_SIZE, OFFSET_SIZE},
-    error::KeplerResult,
     traits::Getable,
     utils::{from_le_to_u32, from_le_to_u64},
 };
@@ -25,7 +24,7 @@ impl SparseIndex {
 }
 
 impl Getable for SSTable {
-    fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
+    fn get(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
         let i = self.index.partition_point(|x| x.first_key <= key);
         if i == 0 {
             return Ok(None);
@@ -70,7 +69,7 @@ impl SSTable {
         key: &[u8],
         target_offset: usize,
         block_len: usize,
-    ) -> KeplerResult<Option<Bytes>> {
+    ) -> crate::Result<Option<Bytes>> {
         let mut idx = target_offset;
         let mmap = &self.mmap;
         let end_bound = target_offset + block_len;

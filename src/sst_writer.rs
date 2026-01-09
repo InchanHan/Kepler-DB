@@ -12,9 +12,9 @@ use std::{
 use memmap2::Mmap;
 
 use crate::{
+    Error,
     bloom::BloomFilter,
     constants::{BUF_SIZE, LEN_SIZE, MAGIC, OFFSET_SIZE, PAGE_4KB},
-    error::{KeplerErr, KeplerResult},
     imm_tables::ImmTables,
     manifest::Manifest,
     sst_manager::SSTManager,
@@ -51,7 +51,7 @@ impl SSTWriter {
         imm_tables: Arc<ImmTables>,
         sst_manager: Arc<SSTManager>,
         err_tx: Sender<WorkerSignal>,
-    ) -> KeplerResult<Self> {
+    ) -> crate::Result<Self> {
         let (flush_tx, flush_rx) = sync_channel::<WorkerSignal>(4);
 
         start_sst_writer_thread(path, manifest, imm_tables, sst_manager, flush_rx, err_tx)?;
@@ -59,10 +59,8 @@ impl SSTWriter {
         Ok(Self { sender: flush_tx })
     }
 
-    pub(crate) fn send(&self, signal: WorkerSignal) -> KeplerResult<()> {
-        self.sender
-            .send(signal)
-            .map_err(|_| KeplerErr::ManifestCorrupted(0))?;
+    pub(crate) fn send(&self, signal: WorkerSignal) -> crate::Result<()> {
+        self.sender.send(signal).map_err(|_| Error::Poisoned)?;
         Ok(())
     }
 }
@@ -74,11 +72,11 @@ fn start_sst_writer_thread(
     sst_manager: Arc<SSTManager>,
     flush_rx: Receiver<WorkerSignal>,
     err_tx: Sender<WorkerSignal>,
-) -> KeplerResult<()> {
+) -> crate::Result<()> {
     let sst_dir_path = path.join("sst");
 
     thread::spawn(move || {
-        let process = || -> KeplerResult<()> {
+        let process = || -> crate::Result<()> {
             while let Ok(WorkerSignal::Flush(table_map)) = flush_rx.recv() {
                 let sstno = sst_manager.get_id();
 
@@ -91,7 +89,7 @@ fn start_sst_writer_thread(
         };
 
         if let Err(_) = process() {
-            let _ = err_tx.send(WorkerSignal::Panic(KeplerErr::CorruptedSst(0)));
+            let _ = err_tx.send(WorkerSignal::Panic(Error::Poisoned));
         }
     });
 
@@ -120,7 +118,7 @@ fn flush_one(
     sst_path: &Path,
     sstno: u64,
     table_map: Arc<TableMap>,
-) -> KeplerResult<(SSTable, FlushResult)> {
+) -> crate::Result<(SSTable, FlushResult)> {
     let sst_path = sst_path.join(format!("sst-{:06}.log", sstno));
     let sst = OpenOptions::new()
         .create(true)

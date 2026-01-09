@@ -1,5 +1,6 @@
 use crate::{
-    error::{KeplerErr, KeplerResult},
+    Error,
+    constants::SEQNO_SIZE,
     traits::{Getable, Putable},
     types::{TableMap, Value},
 };
@@ -13,8 +14,8 @@ use std::{
 };
 
 impl Getable for MemTable {
-    fn get(&self, key: &[u8]) -> KeplerResult<Option<Bytes>> {
-        if let Some(v) = self.tree_get(key)? {
+    fn get(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
+        if let Some(v) = self.try_get(key)? {
             match v {
                 Value::Data(b) => return Ok(Some(b)),
                 Value::Tombstone => return Ok(None),
@@ -25,9 +26,9 @@ impl Getable for MemTable {
 }
 
 impl Putable for MemTable {
-    fn put(&self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> KeplerResult<()> {
+    fn put(&self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> crate::Result<()> {
         let key_bytes = Bytes::copy_from_slice(key);
-        let mut allocated = key.len() + 8;
+        let mut allocated = key.len() + SEQNO_SIZE;
 
         let value = match val {
             Some(v) => {
@@ -43,7 +44,7 @@ impl Putable for MemTable {
         self.bytes_written.fetch_add(allocated, Ordering::Relaxed);
         self.tree
             .write()
-            .map_err(|_| KeplerErr::LockPoisoned)?
+            .map_err(|_| Error::Poisoned)?
             .insert(key_bytes, (seqno, value));
         Ok(())
     }
@@ -66,13 +67,13 @@ impl MemTable {
         self.bytes_written.load(Ordering::Relaxed)
     }
 
-    pub fn take_tree(&self) -> KeplerResult<TableMap> {
-        let mut guard = self.tree.write().map_err(|_| KeplerErr::LockPoisoned)?;
+    pub fn take_tree(&self) -> crate::Result<TableMap> {
+        let mut guard = self.tree.write().map_err(|_| Error::Poisoned)?;
         Ok(std::mem::take(&mut *guard))
     }
 
-    pub fn tree_get(&self, key: &[u8]) -> KeplerResult<Option<Value>> {
-        let guard = self.tree.read().map_err(|_| KeplerErr::LockPoisoned)?;
+    fn try_get(&self, key: &[u8]) -> crate::Result<Option<Value>> {
+        let guard = self.tree.read().map_err(|_| Error::Poisoned)?;
         if let Some((_seqno, val)) = guard.get(key) {
             return Ok(Some(val.clone()));
         }

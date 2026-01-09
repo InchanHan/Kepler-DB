@@ -1,29 +1,30 @@
 use crate::{
+    Error,
     constants::{WAL_CAP_LIMIT, WAL_HEADER_SIZE},
-    error::{KeplerErr, KeplerResult},
     mem_table::MemTable,
     traits::Putable,
     utils::ensure_dir,
 };
 use std::{
     fs::{self, File, OpenOptions},
-    io::{BufRead, BufReader, BufWriter, Read, Write},
+    io::{self, BufRead, BufReader, BufWriter, Read, Write},
     path::{Path, PathBuf},
 };
 
-pub struct FileId(u64);
+pub(crate) struct FileId(u64);
 
-pub struct Journal {
+pub(crate) struct Journal {
     id: FileId,
     wal: BufWriter<File>,
     wal_dir_path: PathBuf,
     bytes_written: usize,
+    sync_count: usize,
 }
 
 impl Journal {
-    pub(crate) fn open(path: &Path, seqno: u64) -> KeplerResult<(Self, MemTable, u64)> {
+    pub(crate) fn open(path: &Path, seqno: u64) -> crate::Result<(Self, MemTable, u64)> {
         let wal_dir_path = path.join("wal");
-        ensure_dir(&wal_dir_path)?;
+        ensure_dir(&wal_dir_path).map_err(|e| Error::Io(e))?;
         let (mem, next_seqno, latest_id) = recovery_wal(&wal_dir_path, seqno)?;
         let next_id = latest_id.0 + 1;
         let wal = OpenOptions::new()
@@ -37,18 +38,14 @@ impl Journal {
                 wal: BufWriter::new(wal),
                 wal_dir_path,
                 bytes_written: 0,
+                sync_count: 0,
             },
             mem,
             next_seqno,
         ))
     }
 
-    pub(crate) fn insert(
-        &mut self,
-        seqno: u64,
-        key: &[u8],
-        val: Option<&[u8]>,
-    ) -> KeplerResult<()> {
+    pub(crate) fn insert(&mut self, seqno: u64, key: &[u8], val: Option<&[u8]>) -> io::Result<()> {
         let key_len = key.len() as u32;
         let (val_len, t) = match val {
             None => (0, 1),
@@ -65,10 +62,12 @@ impl Journal {
             self.wal.write_all(v)?;
         };
 
-        self.fsync()?;
+        self.wal.flush()?;
 
         // seqno(8) + type(1) + key_len(4) + val_len(4) + key(?) + val(?)
-        self.bytes_written += WAL_HEADER_SIZE + (key_len + val_len) as usize;
+        let written = WAL_HEADER_SIZE + (key_len + val_len) as usize;
+        self.bytes_written += written;
+        self.sync_count += written;
 
         if self.bytes_written >= WAL_CAP_LIMIT {
             self.rotate()?;
@@ -77,9 +76,11 @@ impl Journal {
         Ok(())
     }
 
-    fn rotate(&mut self) -> KeplerResult<()> {
-        self.fsync()?;
-
+    fn rotate(&mut self) -> io::Result<()> {
+        if self.sync_count >= WAL_CAP_LIMIT * 4 {
+            self.fsync()?;
+            self.sync_count = 0;
+        }
         let id = self.id.0 + 1;
         let wal = OpenOptions::new()
             .create(true)
@@ -93,8 +94,7 @@ impl Journal {
         Ok(())
     }
 
-    fn fsync(&mut self) -> KeplerResult<()> {
-        self.wal.flush()?;
+    fn fsync(&mut self) -> io::Result<()> {
         self.wal.get_mut().sync_all()?;
         Ok(())
     }
@@ -104,7 +104,10 @@ fn create_wal_path(path: &Path, id: u64) -> PathBuf {
     path.join(format!("wal-{:06}.log", id))
 }
 
-fn recovery_wal(wal_dir_path: &Path, next_wal_seqno: u64) -> KeplerResult<(MemTable, u64, FileId)> {
+fn recovery_wal(
+    wal_dir_path: &Path,
+    next_wal_seqno: u64,
+) -> crate::Result<(MemTable, u64, FileId)> {
     let table = MemTable::new();
     let mut max_seqno = next_wal_seqno;
     let mut entries: Vec<_> = fs::read_dir(wal_dir_path)?
@@ -116,6 +119,7 @@ fn recovery_wal(wal_dir_path: &Path, next_wal_seqno: u64) -> KeplerResult<(MemTa
         .and_then(|e| parse_file_name(&e.path()))
         .unwrap_or(FileId(0));
 
+    // since sstno is strictly increasing accross all Wal files, it is okay to use rev()
     for entry in entries.iter().rev() {
         let file_path = entry.path();
         let file = File::open(file_path)?;
@@ -129,7 +133,7 @@ fn recovery_wal(wal_dir_path: &Path, next_wal_seqno: u64) -> KeplerResult<(MemTa
                 if e.kind() == std::io::ErrorKind::UnexpectedEof {
                     break;
                 }
-                return Err(KeplerErr::Io(e));
+                return Err(e.into());
             }
 
             let seqno = u64::from_le_bytes(header[0..8].try_into().unwrap());

@@ -1,5 +1,9 @@
 use crate::{
-    constants::BUF_SIZE, error::{KeplerErr, KeplerResult}, sst_writer::FlushResult, types::WorkerSignal, version::{SSTInfo, Version}
+    Error,
+    constants::BUF_SIZE,
+    sst_writer::FlushResult,
+    types::WorkerSignal,
+    version::{SSTInfo, Version},
 };
 use std::{
     collections::BTreeMap,
@@ -18,7 +22,7 @@ pub(crate) struct Manifest {
 }
 
 impl Manifest {
-    pub fn new(path: &Path, err_tx: Sender<WorkerSignal>) -> KeplerResult<(Arc<Self>, Version)> {
+    pub fn new(path: &Path, err_tx: Sender<WorkerSignal>) -> crate::Result<(Arc<Self>, Version)> {
         let manifest_path = path.join("manifest");
         let (manifest_tx, manifest_rx) = sync_channel::<FlushResult>(8);
         let version = restore_sst_list(&manifest_path)?;
@@ -32,10 +36,8 @@ impl Manifest {
         ))
     }
 
-    pub fn send(&self, result: FlushResult) -> KeplerResult<()> {
-        self.sender
-            .send(result)
-            .map_err(|_| KeplerErr::ManifestCorrupted(0))?;
+    pub(crate) fn send(&self, result: FlushResult) -> crate::Result<()> {
+        self.sender.send(result).map_err(|_| Error::Poisoned)?;
         Ok(())
     }
 }
@@ -44,7 +46,7 @@ fn start_manifest_thread(
     manifest_path: &Path,
     err_tx: Sender<WorkerSignal>,
     manifest_rx: Receiver<FlushResult>,
-) -> KeplerResult<()> {
+) -> crate::Result<()> {
     let manifest = OpenOptions::new()
         .create(true)
         .read(true)
@@ -68,14 +70,14 @@ fn start_manifest_thread(
         };
 
         if let Err(e) = process() {
-            let _ = err_tx.send(WorkerSignal::Panic(KeplerErr::Io(e)));
+            let _ = err_tx.send(WorkerSignal::Panic(Error::Io(e)));
         }
     });
 
     Ok(())
 }
 
-fn restore_sst_list(manifest_path: &Path) -> KeplerResult<Version> {
+fn restore_sst_list(manifest_path: &Path) -> crate::Result<Version> {
     let file = OpenOptions::new()
         .create(true)
         .read(true)
@@ -105,11 +107,11 @@ fn restore_sst_list(manifest_path: &Path) -> KeplerResult<Version> {
                     1 => {
                         sst_list.remove(&sstno);
                     }
-                    _ => return Err(KeplerErr::ManifestCorrupted(sstno as usize)),
+                    _ => return Err(Error::Corrupted),
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
-            Err(e) => return Err(KeplerErr::Io(e)),
+            Err(e) => return Err(Error::Io(e)),
         }
     }
     Ok(Version::new(sst_list, max_seqno + 1, max_sstno + 1))
