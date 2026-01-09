@@ -1,9 +1,9 @@
 use bytes::Bytes;
-use kepler::{Kepler, KeplerResult};
+use kepler::Kepler;
 use tempfile::tempdir;
 
 #[test]
-fn insert_and_get() -> KeplerResult<()> {
+fn insert_and_get() -> kepler::Result<()> {
     let temp = tempdir()?;
     let db = Kepler::new(temp.path())?;
 
@@ -20,10 +20,10 @@ fn insert_and_get() -> KeplerResult<()> {
 }
 
 #[test]
-fn overwrite_previous_val() -> KeplerResult<()> {
+fn overwrite_previous_val() -> kepler::Result<()> {
     let temp = tempdir()?;
     let db = Kepler::new(temp.path())?;
-    
+
     db.insert(b"water", b"melon")?;
     db.insert(b"water", b"park")?;
     let found_val = db.get(b"water")?;
@@ -39,10 +39,10 @@ fn overwrite_previous_val() -> KeplerResult<()> {
 }
 
 #[test]
-fn try_get_with_false_key() -> KeplerResult<()> {
+fn try_get_with_false_key() -> kepler::Result<()> {
     let temp = tempdir()?;
     let db = Kepler::new(temp.path())?;
-    
+
     let found_val = db.get(b"black")?;
 
     assert_eq!(found_val, None);
@@ -51,26 +51,25 @@ fn try_get_with_false_key() -> KeplerResult<()> {
 }
 
 #[test]
-fn try_get_after_remove() -> KeplerResult<()> {
+fn try_get_after_remove() -> kepler::Result<()> {
     let temp = tempdir()?;
     let db = Kepler::new(temp.path())?;
 
     db.insert(b"fizz", b"buzz")?;
     db.remove(b"fizz")?;
     let found_val = db.get(b"fizz")?;
-    
+
     assert_eq!(found_val, None);
 
     Ok(())
 }
 
 #[test]
-fn try_remove_before_insert() -> KeplerResult<()> {
+fn try_remove_before_insert() -> kepler::Result<()> {
     let temp = tempdir()?;
     let db = Kepler::new(temp.path())?;
 
     db.remove(b"ambient")?;
-    
+
     Ok(())
 }
-
