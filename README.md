@@ -100,13 +100,13 @@ db.remove(b"hello")?;
 ---
 
 ## Planned Work (Post-MVP)
+- [ ] Compaction (SST merging and level management)
+- [ ] Batch write support
+- [ ] CLI interface
+- [ ] Improved error classification and recovery policies
+- [ ] Value encoding and format optimizations
+- [ ] Range queries and iterator support
 
-> Compaction (SST merging and level management)
-> Batch write support
-> CLI interface
-> Improved error classification and recovery policies
-> Value encoding and format optimizations
-> Range queries and iterator support
 ---
 
 
