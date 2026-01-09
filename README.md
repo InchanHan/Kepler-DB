@@ -46,7 +46,7 @@ let db = Kepler::new("aa")?;
 db.insert(b"hello", b"good")?;
 
 // retrieve data from DB
-let founded_val: Option<Bytes> = db.get(b"hello")?;
+let found_val: Option<Bytes> = db.get(b"hello")?;
 
 // remove data
 db.remove(b"hello")?;
