@@ -1,22 +1,38 @@
 # KeplerDB 🪐 (MVP completed, now in large refactory)
-KeplerDB is a lightweight, high-performance embedded key-value store written in Rust.  
-It implements core components of modern LSM-tree-based databases, including WAL (Write-Ahead Logging), MemTables, background flush workers, and manifest logging for crash-safe recovery.
+
+> **Status:** MVP completed (v0.1)  
+> Currently undergoing a large-scale refactor for ergonomics, testing, and performance evaluation.
+
 <div align="center">
   <img width="800" height="525" alt="ChatGPT Image Dec 24, 2025, 03_39_55 AM" src="https://github.com/user-attachments/assets/48ec9b43-90f4-44e4-9ecf-4e9029c5573f" />
 </div>
 
-- **Write-Ahead Log (WAL)** for durability
-- **MemTable (BTreeMap)** for fast in-memory writes
-- **Flush Worker** for async flushing to on-disk SST files
-- **Manifest Logging** for recoverable metadata persistence
-- **Threaded Architecture** (WAL writer, flush worker, manifest writer)
-- **Crash Recovery** from WAL and Manifest
-- **Minimal Dependencies**, Zero External Storage Engines
+KeplerDB is a lightweight, high-performance **embedded key-value store** written in Rust.  
+It implements the **core building blocks of modern LSM-tree storage engines**, focusing on correctness, crash safety, and clear internal architecture rather than feature completeness.
+
+## Features
+
+- **Write-Ahead Log (WAL)** for durability and crash recovery  
+- **MemTable (BTreeMap-based)** for fast in-memory writes  
+- **Immutable MemTables (ImmTables)** with background flushing  
+- **SSTables** with:
+  - Sparse index
+  - Bloom filter
+- **Manifest log** for recoverable metadata persistence  
+- **Threaded architecture**
+  - WAL writer
+  - Flush worker
+  - Manifest writer
+- **Crash recovery**
+  - WAL replay
+  - Manifest-based SST restoration
+- **Minimal dependencies**
+- **Zero external storage engines**
 
 ---
 ## How to use
 ```rust
-fn main() -> KeplerResult<()> {
+fn main() -> Result<()> {
   // start new DB  
   let db = Kepler::new("aa")?;
 
@@ -32,12 +48,6 @@ fn main() -> KeplerResult<()> {
   Ok(())
 }
 ```
----
-
-## 📐 Architecture
-
-<img width="535" height="537" alt="Screenshot 2025-12-24 at 1 32 11 AM" src="https://github.com/user-attachments/assets/3ce44692-3a4b-4fee-bc9e-23754b412ae2" />
-
 ---
 
 ## 🧪 Testing (TODO)
