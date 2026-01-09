@@ -1,4 +1,4 @@
-# KeplerDB 🪐 (MVP completed, now in large refactory)
+# KeplerDB 🪐
 
 > **Status:** MVP completed (v0.1)  
 > Currently undergoing a large-scale refactor for ergonomics, testing, and performance evaluation.
@@ -6,6 +6,13 @@
 <div align="center">
   <img width="800" height="525" alt="ChatGPT Image Dec 24, 2025, 03_39_55 AM" src="https://github.com/user-attachments/assets/48ec9b43-90f4-44e4-9ecf-4e9029c5573f" />
 </div>
+<p align="center">
+    <img src="https://img.shields.io/badge/version-v0.1.0-green" />
+    <img src="https://img.shields.io/badge/MSRV-v1.85.1-blue" />
+    <img src="https://img.shields.io/badge/dependencies-0%20of%205%20outdated-green" />
+    <img src="https://img.shields.io/badge/documents-unavailable-red" />
+</p>
+
 
 KeplerDB is a lightweight, high-performance **embedded key-value store** written in Rust.  
 It implements the **core building blocks of modern LSM-tree storage engines**, focusing on correctness, crash safety, and clear internal architecture rather than feature completeness.
@@ -20,8 +27,8 @@ It implements the **core building blocks of modern LSM-tree storage engines**, f
   - Bloom filter
 - **Manifest log** for recoverable metadata persistence  
 - **Threaded architecture**
-  - WAL writer
-  - Flush worker
+  - WAL writer (Journal)
+  - SST writer
   - Manifest writer
 - **Crash recovery**
   - WAL replay
@@ -32,30 +39,19 @@ It implements the **core building blocks of modern LSM-tree storage engines**, f
 ---
 ## How to use
 ```rust
-fn main() -> Result<()> {
-  // start new DB  
-  let db = Kepler::new("aa")?;
+// start new DB  
+let db = Kepler::new("aa")?;
 
-  // add some data
-  db.insert(b"hello", b"good")?;
+// add some data
+db.insert(b"hello", b"good")?;
 
-  // retrieve data from DB
-  let founded_val: Option<Bytes> = db.get(b"hello")?
+// retrieve data from DB
+let founded_val: Option<Bytes> = db.get(b"hello")?;
 
-  // remove data
-  db.remove(b"hello")?;
+// remove data
+db.remove(b"hello")?;
 
-  Ok(())
-}
 ```
----
-
-## 🧪 Testing (TODO)
-
-- [ ] Unit tests for `MemTable`, `WAL`, and `Manifest`
-- [ ] Integration tests with crash recovery scenarios
-- [ ] Performance benchmarks for write/read throughput
-
 ---
 
 ## 📚 Documentation (TODO)
@@ -77,33 +73,40 @@ fn main() -> Result<()> {
 
 ---
 
-## 📂 Current Module Breakdown
+## 📂 Module Breakdown
 
-| Module         | Description                                  |
-|----------------|----------------------------------------------|
-| `db.rs`        | Entry point of KeplerDB (API interface)      |
-| `memtable.rs`  | In-memory BTreeMap with seqno tracking       |
-| `wal_writer.rs`| WAL write logic + append/fsync               |
-| `flush_worker.rs` | SST writer + flush thread                 |
-| `recovery.rs`  | Recovery logic from WAL + manifest           |
-| `manifest.rs`  | Metadata append log for SSTs                 |
-| `value.rs`     | Value enum (Data, Tombstone) abstraction     |
-| `error.rs`     | Custom error type `KeplerErr`                |
-| `constants.rs` | Constants for file paths, formats, etc.      |
-| `utils.rs`     | Helper utilities and abstractions            |
+| File | Description |
+|------|-------------|
+| `lib.rs` | Crate entry point and public exports |
+| `db.rs` | Public database API (`Kepler`) and user-facing interface |
+| `journal.rs` | Write-Ahead Log (WAL) implementation and recovery logic |
+| `mem_table.rs` | In-memory MemTable with seqno tracking |
+| `imm_tables.rs` | Immutable MemTable queue for background flushing |
+| `table_set.rs` | Orchestration layer combining MemTable, ImmTables, and SSTables |
+| `sst_writer.rs` | SSTable writer and flush logic |
+| `sstable.rs` | SSTable reader, sparse index, and bloom filter lookup |
+| `sst_manager.rs` | SSTable set management and lookup coordination |
+| `manifest.rs` | Manifest log for persistent SST metadata |
+| `version.rs` | Versioned SST state and recovery metadata |
+| `bloom.rs` | Bloom filter implementation |
+| `error.rs` | Unified error type and escalation semantics |
+| `traits.rs` | Core engine traits (`Getable`, `Putable`) |
+| `types.rs` | Shared engine types and worker signals |
+| `constants.rs` | File format constants and layout definitions |
+| `utils.rs` | Low-level helpers (fs helpers, encoding, parsing utilities) |
+
+
 
 ---
 
-## 🚀 Status
+## Planned Work (Post-MVP)
 
-> ✅ MVP complete  
-> 🔧 Currently doing large refactory  
-> 🧪 Planning performance evaluation and benchmarks  
-> 🧠 Designed for learning and future extension into full DB/FS engines
-
+> Compaction (SST merging and level management)
+> Batch write support
+> CLI interface
+> Improved error classification and recovery policies
+> Value encoding and format optimizations
+> Range queries and iterator support
 ---
 
-## 📝 License
-
-MIT
 
