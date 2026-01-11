@@ -118,9 +118,10 @@ fn recovery_wal(
         .last()
         .and_then(|e| parse_file_name(&e.path()))
         .unwrap_or(FileId(0));
-
-    // since sstno is strictly increasing accross all Wal files, it is okay to use rev()
-    for entry in entries.iter().rev() {
+    // NOTE:
+    // WAL recovery must replay files in ascending order.
+    // Reverse replay breaks record-level ordering guarantees.
+    for entry in entries.iter() {
         let file_path = entry.path();
         let file = File::open(file_path)?;
         let mut reader = BufReader::with_capacity(64 * 1024, file);
@@ -174,4 +175,59 @@ fn parse_file_name(path: &Path) -> Option<FileId> {
 
     let num_str = &name[4..name.len() - 4];
     num_str.parse().ok().map(FileId)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::traits::Getable;
+
+    use bytes::Bytes;
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn wal_replay() -> crate::Result<()> {
+        let dir = tempdir()?;
+
+        {
+            let (mut journal, _, _) = Journal::open(dir.path(), 0)?;
+            journal.insert(1, b"a", Some(b"1"))?;
+            journal.insert(2, b"b", Some(b"2"))?;
+        }
+
+        let (_, mem, _) = Journal::open(dir.path(), 0)?;
+        assert_eq!(mem.get(b"a")?, Some(Bytes::from("1")));
+        assert_eq!(mem.get(b"b")?, Some(Bytes::from("2")));
+        Ok(())
+    }
+
+    #[test]
+    fn wal_replay_multiple_files() -> crate::Result<()> {
+        let dir = tempdir()?;
+        let mut n = 0;
+        let mut rotate_cnt = 0;
+
+        {
+            let (mut journal, _, _) = Journal::open(dir.path(), 0)?;
+            let mut last_id = journal.id.0;
+
+            while rotate_cnt < 2 {
+                journal.insert(n, b"k", Some(&[n as u8]))?;
+                n += 1;
+
+                if journal.id.0 != last_id {
+                    rotate_cnt += 1;
+                    last_id = journal.id.0;
+                }
+            }
+        }
+
+        let (_, mem, _) = Journal::open(dir.path(), 0)?;
+        assert_eq!(
+            mem.get(b"k")?,
+            Some(Bytes::copy_from_slice(&[(n - 1) as u8]))
+        );
+
+        Ok(())
+    }
 }
