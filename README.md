@@ -1,4 +1,4 @@
-# KeplerDB 🪐
+# KeplerDB
 
 > **Status:** MVP completed (v0.1)  
 > Currently undergoing a large-scale refactor for ergonomics, testing, and performance evaluation.
@@ -54,7 +54,7 @@ db.remove(b"hello")?;
 ```
 ---
 
-## 📚 Documentation (TODO)
+## Documentation (TODO)
 
 - [ ] Public API doc comments (`///`)
 - [ ] Module-level documentation
@@ -62,7 +62,7 @@ db.remove(b"hello")?;
 
 ---
 
-## 🔧 Planned Features
+## Planned Features
 
 - [ ] **Compaction** (SST merging)
 - [ ] **CLI interface** for interaction
@@ -73,7 +73,7 @@ db.remove(b"hello")?;
 
 ---
 
-## 📂 Module Breakdown
+## Module Breakdown
 
 | File | Description |
 |------|-------------|
