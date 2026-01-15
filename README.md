@@ -70,7 +70,7 @@ Benchmarks were executed with CPU affinity pinning and `rdtscp`-based cycle meas
 - 📈 **Sequential Read:** Consistently faster than sled and competitive with redb  
 - 🔬 **Random Read:** Currently slower than redb, indicating clear optimization opportunities  
 
-Full benchmark methodology, raw results, and additional plots are available in [`benches/`](./benches).
+Full benchmark methodology, raw results, and additional plots are available in [`bench/`](./bench).
 
 ---
 
