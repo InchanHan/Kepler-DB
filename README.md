@@ -7,7 +7,7 @@
   <img width="800" height="525" alt="ChatGPT Image Dec 24, 2025, 03_39_55 AM" src="https://github.com/user-attachments/assets/48ec9b43-90f4-44e4-9ecf-4e9029c5573f" />
 </div>
 <p align="center">
-    <img src="https://img.shields.io/badge/version-v0.1.0-green" />
+    <img src="https://img.shields.io/badge/version-v0.1.1-green" />
     <img src="https://img.shields.io/badge/MSRV-v1.85.1-blue" />
     <img src="https://img.shields.io/badge/dependencies-0%20of%205%20outdated-green" />
     <img src="https://img.shields.io/badge/documents-unavailable-red" />
