@@ -1,0 +1,104 @@
+N=1_000_000
+VALUE_SIZE=1024
+redb_batch=2000
+warmup=3
+reps=9
+CPU affinity enabled
+rdtscp enabled
+
+[Chronix] fn kepler_seq_write
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 2.407       s
+    ns_per_access     : 2.407       µs
+    cycles_per_access : 60897.585   cycles
+    accesses          : 1000000     
+[Chronix] fn sled_seq_write
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 5.630       s
+    ns_per_access     : 5.630       µs
+    cycles_per_access : 142115.429  cycles
+    accesses          : 1000000     
+[Chronix] fn redb_seq_write
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 4.137       s
+    ns_per_access     : 4.137       µs
+    cycles_per_access : 104078.094  cycles
+    accesses          : 1000000     
+[Chronix] fn kepler_rand_write
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 2.690       s
+    ns_per_access     : 2.690       µs
+    cycles_per_access : 67568.262   cycles
+    accesses          : 1000000     
+[Chronix] fn sled_rand_write
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 9.476       s
+    ns_per_access     : 9.476       µs
+    cycles_per_access : 239809.619  cycles
+    accesses          : 1000000     
+[Chronix] fn redb_rand_write
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 13.107      s
+    ns_per_access     : 13.107      µs
+    cycles_per_access : 330899.863  cycles
+    accesses          : 1000000     
+[Chronix] fn kepler_seq_read
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 3.266       s
+    ns_per_access     : 3.266       µs
+    cycles_per_access : 82226.353   cycles
+    accesses          : 1000000     
+[Chronix] fn sled_seq_read
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 6.821       s
+    ns_per_access     : 6.821       µs
+    cycles_per_access : 171509.757  cycles
+    accesses          : 1000000     
+[Chronix] fn redb_seq_read
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 4.315       s
+    ns_per_access     : 4.315       µs
+    cycles_per_access : 108803.743  cycles
+    accesses          : 1000000     
+[Chronix] fn kepler_rand_read
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 9.938       s
+    ns_per_access     : 9.938       µs
+    cycles_per_access : 252388.799  cycles
+    accesses          : 1000000     
+[Chronix] fn sled_rand_read
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 7.477       s
+    ns_per_access     : 7.477       µs
+    cycles_per_access : 178548.072  cycles
+    accesses          : 1000000     
+[Chronix] fn redb_rand_read
+    aggregation       : Median
+    warmup | reps     : 3 | 9
+
+    elapsed_ns        : 4.321       s
+    ns_per_access     : 4.321       µs
+    cycles_per_access : 108921.114  cycles
+    accesses          : 1000000   
