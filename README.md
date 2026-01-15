@@ -54,6 +54,26 @@ db.remove(b"hello")?;
 ```
 ---
 
+## Performance
+
+Kepler demonstrates strong performance in write-heavy and sequential workloads, achieving **1.7×–4.8× lower latency** compared to sled and redb in controlled single-threaded benchmarks.
+Benchmarks were executed with CPU affinity pinning and `rdtscp`-based cycle measurements to minimize scheduler noise and timing skew.
+
+### Random Write (µs/op)
+
+<img width="640" height="480" alt="rand_write" src="https://github.com/user-attachments/assets/ad779029-ae1c-403a-9524-3250a1aadfa5" />
+
+### Highlights
+
+- 🚀 **Random Write:** Up to **4.8× faster** than redb and **3.5× faster** than sled  
+- ⚡ **Sequential Write:** ~**2.3× faster** than sled  
+- 📈 **Sequential Read:** Consistently faster than sled and competitive with redb  
+- 🔬 **Random Read:** Currently slower than redb, indicating clear optimization opportunities  
+
+Full benchmark methodology, raw results, and additional plots are available in [`benches/`](./benches).
+
+---
+
 ## Documentation (TODO)
 
 - [ ] Public API doc comments (`///`)
