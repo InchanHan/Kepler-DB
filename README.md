@@ -65,20 +65,12 @@ Benchmarks were executed with CPU affinity pinning and `rdtscp`-based cycle meas
 
 ### Highlights
 
-- 🚀 **Random Write:** Up to **4.8× faster** than redb and **3.5× faster** than sled  
-- ⚡ **Sequential Write:** ~**2.3× faster** than sled  
-- 📈 **Sequential Read:** Consistently faster than sled and competitive with redb  
-- 🔬 **Random Read:** Currently slower than redb, indicating clear optimization opportunities  
+- **Random Write:** Up to **4.8× faster** than redb and **3.5× faster** than sled  
+- **Sequential Write:** ~**2.3× faster** than sled  
+- **Sequential Read:** Consistently faster than sled and competitive with redb  
+- **Random Read:** Currently slower than redb, indicating clear optimization opportunities  
 
 Full benchmark methodology, raw results, and additional plots are available in [`bench/`](./bench).
-
----
-
-## Documentation (TODO)
-
-- [ ] Public API doc comments (`///`)
-- [ ] Module-level documentation
-- [ ] Example usage
 
 ---
 
