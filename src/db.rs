@@ -50,6 +50,7 @@ pub struct KeplerInner {
     pub seqno: AtomicU64,
     pub tables: TableSet,
     pub journal: Mutex<Journal>,
+    #[allow(dead_code)]
     pub manifest: Arc<Manifest>,
     pub(crate) err_rx: Receiver<WorkerSignal>,
 }

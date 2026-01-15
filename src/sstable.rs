@@ -39,6 +39,7 @@ impl Getable for SSTable {
 }
 
 pub(crate) struct SSTable {
+    #[allow(dead_code)]
     pub(crate) id: u64,
     mmap: Mmap,
     index: Vec<SparseIndex>,

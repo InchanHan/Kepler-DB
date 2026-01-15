@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 
 pub struct Version {
+    #[allow(dead_code)]
     pub sst_list: BTreeMap<u64, SSTInfo>,
     pub next_seqno: u64,
     pub next_sstno: u64,
@@ -17,6 +18,7 @@ impl Version {
 }
 
 pub struct SSTInfo {
+    #[allow(dead_code)]
     pub id: u64,
 }
 

@@ -12,6 +12,7 @@ pub enum Value {
 
 pub enum WorkerSignal {
     Flush(Arc<TableMap>),
+    #[allow(dead_code)]
     Shutdown,
     Panic(Error),
 }
