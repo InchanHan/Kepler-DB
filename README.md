@@ -109,16 +109,4 @@ Full benchmark methodology, raw results, and additional plots are available in [
 
 
 
----
-
-## Planned Work (Post-MVP)
-- [ ] Compaction (SST merging and level management)
-- [ ] Batch write support
-- [ ] CLI interface
-- [ ] Improved error classification and recovery policies
-- [ ] Value encoding and format optimizations
-- [ ] Range queries and iterator support
-
----
-
 
