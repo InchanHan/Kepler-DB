@@ -34,15 +34,15 @@ impl Kepler {
     }
 
     pub fn insert(&self, key: &[u8], val: &[u8]) -> crate::Result<()> {
-        Ok(self.0.put(key, Some(val))?)
+        self.0.put(key, Some(val))
     }
 
     pub fn remove(&self, key: &[u8]) -> crate::Result<()> {
-        Ok(self.0.put(key, None)?)
+        self.0.put(key, None)
     }
 
     pub fn get(&self, key: &[u8]) -> crate::Result<Option<Bytes>> {
-        Ok(self.0.get(key)?)
+        self.0.get(key)
     }
 }
 
